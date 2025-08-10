@@ -21,6 +21,7 @@ enum TokenType
 	ATTR,      // @
 	SEMI,	   // ;
 	COLON,	   // :
+	SCOPE,	   // ::
 	COMMA,	   // ,
 	PERIOD,	   // .
 	BRACE,     // { }
@@ -36,6 +37,7 @@ enum TokenType
 	IDENT,	   // Identifiers (`module`, `fn`, `macro`, etc. )
 	FUNC,
 	MACRO,
+	MODULE,
 	EOF
 }
 
@@ -141,12 +143,22 @@ fn Token? Lexer.next(&self) => @pool()
 	{
 		case '@': self.advance()!; return { .type = ATTR };
 		case ';': self.advance()!; return { .type = SEMI };
-		case ':': self.advance()!; return { .type = COLON };
 		case ',': self.advance()!; return { .type = COMMA };
 		case '.': self.advance()!; return { .type = PERIOD };
 		case '+': self.advance()!; return { .type = PLUS };
 		case '-': self.advance()!; return { .type = MINUS };
 		case '*': self.advance()!; return { .type = STAR };
+		case ':':
+			self.advance()!; // Consuem ':'
+			if (self.peek()! == ':')
+			{
+				self.advance()!; // Consume ':'
+				return { .type = SCOPE };
+			}
+			else
+			{
+				return { .type = COMMA };
+			};
 		case '!':
 			self.advance()!; // Consuem '!'
 			if (self.peek()! == '!')
@@ -352,9 +364,10 @@ fn Token? Lexer.scan_ident(&self) => @pool()
 	String str = text.str_view().copy(self.allocator);
 	switch (str)
 	{
-		case "fn":    return { .type = FUNC, .text = str };
-		case "macro": return { .type = MACRO, .text = str };
-		default:      return { .type = IDENT, .text = str };
+		case "fn":     return { .type = FUNC, .text = str };
+		case "macro":  return { .type = MACRO, .text = str };
+		case "module": return { .type = MODULE, .text = str };
+		default:       return { .type = IDENT, .text = str };
 	}
 }
 
