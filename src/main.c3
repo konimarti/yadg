@@ -6,12 +6,26 @@ import yadg::lexer;
 fn int main(String[] args)
 {
 	String file = `
-	module app;
+	// This is the app module
+	module web::app;
 
 	import std::io;
 
 	// Max is a maximum number
 	const MAX = 10;
+	alias NewType @local = int;
+
+
+	<*
+	 Struct description
+	 @deprecated
+	*>
+	struct Hello @local (Printable)
+	{
+		inline int a;
+		String world;
+		int[2] numbers;
+	}
 
 	<*
 	Contract for macro
@@ -51,7 +65,7 @@ fn int main(String[] args)
 				if (args.len != 3) io::printn("Usage: ./yadg -p <path>");
 				@pool()
 				{
-					YadgReport report;
+					YadgLexerReport report;
 					path::temp(args[2])!!.walk(&yadg_update_report, &report)!!;
 					io::printn(report);
 				};
@@ -62,33 +76,42 @@ fn int main(String[] args)
 	else
 	{
 		scan_tokens(input)!!;
+
+		// Parsing step;
+		io::printn(" -- YADG PARSER --");
+		input.seek(0, Seek.SET)!!;
+		@pool()
+		{
+			YadgParser *parser = (YadgParser){}.init(tmem, io::stdout());
+			io::printn(parser.parse(input)!!);
+		};
 	}
 
 	return 0;
 }
 
-struct YadgReport (Printable)
+struct YadgLexerReport (Printable)
 {
 	usz pass;
 	usz nfiles;
 	usz ndirs;
 }
 
-fn usz? YadgReport.to_format(&self, Formatter *f) @dynamic
+fn usz? YadgLexerReport.to_format(&self, Formatter *f) @dynamic
 {
 	usz n;
-	n += f.print ("\nYADG Report\n")!;
-	n += f.print ("-----------\n")!;
-	n += f.printf("Directories scanned: %d\n", self.ndirs)!;
-	n += f.printf("Files scanned      : %d\n", self.nfiles)!;
-	n += f.printf("Files passed       : %d\n", self.pass)!;
+	n += f.print ("\nYADG Lexer Report\n")!;
+	n += f.print (  "-----------------\n")!;
+	n += f.printf("Folders scanned: %d\n", self.ndirs)!;
+	n += f.printf("Files scanned  : %d\n", self.nfiles)!;
+	n += f.printf("Files passed   : %d\n", self.pass)!;
 	if (self.nfiles) n += f.printf("Pass Ratio         : %d %%\n", (100 * self.pass) / self.nfiles)!;
 	return n;
 }
 
 fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 {
-	YadgReport *report = (YadgReport*)data;
+	YadgLexerReport *report = (YadgLexerReport*)data;
 	if (is_dir)
 	{
 		report.ndirs++;
@@ -120,22 +143,11 @@ fn void? scan_tokens(InStream input) => @pool()
 	Lexer lexer;
 	lexer.init(tmem, input);
 
-	Token? tok;
-	while TOKEN_SCAN: (1)
+	Token tok;
+	while (true)
 	{
-		tok = lexer.next();
-		if (catch err = tok)
-		{
-			if (err == io::EOF)
-			{
-				io::printn("EOF.");
-				break TOKEN_SCAN;
-			}
-			return err?;
-		}
+		tok = lexer.next()!;
 		io::printn(tok);
-		// io::printf("Token [%9s]", tok.type);
-		// if (tok.text.len) io::printf(": %s", tok.text.trim());
-		// io::printn("");
+		if (tok.type == EOF) break;
 	}
 }

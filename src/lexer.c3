@@ -8,6 +8,8 @@ faultdef INVALID_CHAR;
 
 enum TokenType : ushort (String symbol)
 {
+	EMPTY     = "0",
+
 	// Operators
 	TILDE     = "~",
 	QUESTION  = "?",
@@ -36,12 +38,17 @@ enum TokenType : ushort (String symbol)
 	DOT	  = ".",
 
 	// Structure
-	LBRACE    = "{",
-	LPAREN    = "(",
-	LBRACK	  = "[",
-	RBRACE    = "}",
-	RPAREN    = ")",
-	RBRACK	  = "]",
+	// LBRACE    = "{",
+	// LPAREN    = "(",
+	// LBRACK	  = "[",
+	// RBRACE    = "}",
+	// RPAREN    = ")",
+	// RBRACK	  = "]",
+
+	BRACE     = "", // {}
+	PAREN     = "", // ()
+	BRACK	  = "", // [] will be lexed as IDENT
+
 	ARROW     = "=>",
 
 	// Comparison
@@ -53,8 +60,8 @@ enum TokenType : ushort (String symbol)
 
 	// Comments and Contracts
 	CONTRACT  = "",  // <* *>
-	LNCOMM    = "",    // Line comment //
-	BLCOMM    = "",    // Block comment /* */
+	LCOMMENT  = "",    // Line comment //
+	BCOMMENT  = "",    // Block comment /* */
 
 	// Identifiers and Strings
 	IDENT     = "",	   // Identifiers (`module`, `fn`, `macro`, etc. )
@@ -91,6 +98,12 @@ struct Token (Printable)
 	Allocator  allocator;
 }
 
+fn String Token.lexeme(&self)
+{
+	if (self.text.len) return self.text.trim("\t\r\n");
+	return self.type.symbol;
+}
+
 fn usz? Token.to_format(&self, Formatter *f) @dynamic
 {
 	usz n;
@@ -101,7 +114,7 @@ fn usz? Token.to_format(&self, Formatter *f) @dynamic
 	if (self.text.len)
 	{
 		@pool() {
-			n += f.printf(" %s", self.text.trim().tescape(true))!;
+			n += f.printf(" %s", self.lexeme().tescape(true))!;
 		};
 	}
 
@@ -112,7 +125,7 @@ fn usz? Token.to_format(&self, Formatter *f) @dynamic
 fn void Token.free(&self)
 {
 	if (!self.allocator) return;
-	self.text.free(self.allocator);
+	if (self.text.len) self.text.free(self.allocator);
 	*self = {};
 }
 
@@ -251,7 +264,6 @@ fn Token? Lexer._next(&self) @private => @pool()
 
 	switch (c)
 	{
-		case '@': self.advance()!; return self.emit_token(ATTRIBUTE);
 		case ';': self.advance()!; return self.emit_token(SEMICOLON);
 		case ',': self.advance()!; return self.emit_token(COMMA);
 		case '.': self.advance()!; return self.emit_token(DOT);
@@ -326,12 +338,18 @@ fn Token? Lexer._next(&self) @private => @pool()
 				default : type = GREATER;
 			}
 			return self.emit_token(type);
-		case '{': self.advance()!; return self.emit_token(LBRACE);
-		case '(': self.advance()!; return self.emit_token(LPAREN);
-		case '[': self.advance()!; return self.emit_token(LBRACK);
-		case '}': self.advance()!; return self.emit_token(RBRACE);
-		case ')': self.advance()!; return self.emit_token(RPAREN);
-		case ']': self.advance()!; return self.emit_token(RBRACK);
+
+		// case '{': self.advance()!; return self.emit_token(LBRACE);
+		// case '(': self.advance()!; return self.emit_token(LPAREN);
+		// case '[': self.advance()!; return self.emit_token(LBRACK);
+		// case '}': self.advance()!; return self.emit_token(RBRACE);
+		// case ')': self.advance()!; return self.emit_token(RPAREN);
+		// case ']': self.advance()!; return self.emit_token(RBRACK);
+		case '{': return self.lex_brace();
+		case '(': return self.lex_paren();
+		case '[': return self.lex_brack();
+
+		case '@': return self.lex_attribute();
 		case '/': return self.lex_comment()!;
 		case '<': return self.lex_contract()!;
 		case '"':
@@ -443,9 +461,9 @@ fn String? Lexer.scan_string(&self)
 }
 
 fn Token? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string()!);
-// fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}")!);
-// fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")")!);
-// fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]")!);
+fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}")!);
+fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")")!);
+fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]")!);
 
 fn Token? Lexer.lex_comment(&self)
 {
@@ -453,8 +471,8 @@ fn Token? Lexer.lex_comment(&self)
 
 	switch (self.peek()!)
 	{
-		case '/': self.advance()!; return self.emit_token(LNCOMM, self.scan_line_comment()!);
-		case '*': self.advance()!; return self.emit_token(BLCOMM, self.scan_block_comment()!);
+		case '/': self.advance()!; return self.emit_token(LCOMMENT, self.scan_line_comment()!);
+		case '*': self.advance()!; return self.emit_token(BCOMMENT, self.scan_block_comment()!);
 		default: return self.emit_token(DIV);
 	}
 }
@@ -511,11 +529,30 @@ fn Token? Lexer.lex_contract(&self)
 	return self.emit_token(CONTRACT, text.str_view().copy(self.allocator));
 }
 
+fn Token? Lexer.lex_attribute(&self) => @pool()
+{
+	char c;
+	DString text = dstring::temp();
+	int i = 0;
+	while ((c = self.peek()!) && (is_ident(c) || c == '@' || (i > 0 && (c == '(' || c == ')'))))
+	{
+		text.append_char(self.advance()!);
+		i++;
+	}
+	String str = text.str_view().copy(self.allocator);
+	return self.emit_token(ATTRIBUTE, str);
+}
+
 fn Token? Lexer.lex_ident(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
-	while ((c = self.peek()!) && is_ident(c)) text.append_char(self.advance()!);
+	int i = 0;
+	while ((c = self.peek()!) && (is_ident(c) || (i > 0 && (c == '[' || c == ']'))))
+	{
+		text.append_char(self.advance()!);
+		i++;
+	}
 
 	String str = text.str_view().copy(self.allocator);
 	switch (str)
