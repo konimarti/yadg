@@ -6,77 +6,81 @@ import std::ascii;
 
 faultdef INVALID_CHAR;
 
-enum TokenType
+enum TokenType : ushort (String symbol)
 {
 	// Operators
-	TILDE,     // ~
-	QUESTION,  // ?
-	EMPTYOPT,  // ??
-	XOR,       // ^
-	EXCLAM,    // !
-	UNWRAP,    // !!
-	PIPE,      // |
-	AMP,       // &
-	AND,       // &&
-	OR,        // ||
-	PLUS,      // +
-	MINUS,     // -
-	STAR,      // *
-	DIV,       // /
-	MODULUS,   // %
-	RSHIFT,    // >>
-	LSHIFT,    // <<
-	ASSIGN,	   // =
+	TILDE     = "~",
+	QUESTION  = "?",
+	EMPTYOPT  = "??",
+	XOR       = "^",
+	EXCLAM    = "!",
+	UNWRAP    = "!!",
+	PIPE      = "|",
+	AMP       = "&",
+	AND       = "&&",
+	OR        = "||",
+	PLUS      = "+",
+	MINUS     = "-",
+	STAR      = "*",
+	DIV       = "/",
+	MODULUS   = "%",
+	RSHIFT    = ">>",
+	LSHIFT    = "<<",
+	ASSIGN	  = "=",
 
 	// Punctuation
-	SEMICOLON, // ;
-	COLON,	   // :
-	SCOPE,	   // ::
-	COMMA,	   // ,
-	DOT,	   // .
+	SEMICOLON = ";",
+	COLON	  = ":",
+	SCOPE	  = "::",
+	COMMA	  = ",",
+	DOT	  = ".",
 
 	// Structure
-	BRACE,     // { }
-	PAREN,     // ( )
-	BRACK,	   // [ ]
-	ARROW,     // =>
+	LBRACE    = "{",
+	LPAREN    = "(",
+	LBRACK	  = "[",
+	RBRACE    = "}",
+	RPAREN    = ")",
+	RBRACK	  = "]",
+	ARROW     = "=>",
 
 	// Comparison
-	EQUAL,	   // ==
-	LESS,      // <
-	LESSEQ,    // <=
-	GREATER,   // >
-	GREATEREQ, // >=
+	EQUAL	  = "==",
+	LESS      = "<",
+	LESSEQ    = "<=",
+	GREATER   = ">",
+	GREATEREQ = ">=",
 
 	// Comments and Contracts
-	CONTRACT,  // <* *>
-	LNCOMM,    // Line comment //
-	BLCOMM,    // Block comment /* */
+	CONTRACT  = "",  // <* *>
+	LNCOMM    = "",    // Line comment //
+	BLCOMM    = "",    // Block comment /* */
 
 	// Identifiers and Strings
-	IDENT,	   // Identifiers (`module`, `fn`, `macro`, etc. )
-	STRING,    // "..", '..', `..`
+	IDENT     = "",	   // Identifiers (`module`, `fn`, `macro`, etc. )
+	STRING    = "",    // "..", '..', `..`
 
 	// Keywords
-	ATTRIBUTE, // @
-	FUNC,      // fn
-	MACRO,     // macro
-	MODULE,    // module
-	IMPORT,    // import
-	CONST,     // const
-	ALIAS,     // alias
-	TYPEDEF,   // typedef
-	ENUM,      // enum
-	STRUCT,    // struct
-	BITSTRUCT, // bitstruct
-	FAULTDEF,  // faultdef
-	IF,        // if
-	ELSE,      // else
-	WHILE,     // while
-	FOR,       // for
-	FOREACH,   // foreach
-	FOREACHR,  // foreachr
-	EOF
+	ATTRIBUTE = "", // @
+	FUNC      = "", // fn
+	MACRO     = "", // macro
+	MODULE    = "", // module
+	IMPORT    = "", // import
+	CONST     = "", // const
+	ALIAS     = "", // alias
+	TYPEDEF   = "", // typedef
+	ENUM      = "", // enum
+	STRUCT    = "", // struct
+	BITSTRUCT = "", // bitstruct
+	FAULTDEF  = "", // faultdef
+	IF        = "", // if
+	ELSE      = "", // else
+	WHILE     = "", // while
+	FOR       = "", // for
+	FOREACH   = "", // foreach
+	FOREACHR  = "", // foreachr
+
+	EOF       = "EOF",
 }
 
 struct Token (Printable)
@@ -325,9 +329,12 @@ fn Token? Lexer.next(&self) => @pool()
 				default : type = GREATER;
 			}
 			return self.emit_token(type);
-		case '{': return self.lex_brace()!;
-		case '(': return self.lex_paren()!;
-		case '[': return self.lex_brack()!;
+		case '{': self.advance()!; return self.emit_token(LBRACE);
+		case '(': self.advance()!; return self.emit_token(LPAREN);
+		case '[': self.advance()!; return self.emit_token(LBRACK);
+		case '}': self.advance()!; return self.emit_token(RBRACE);
+		case ')': self.advance()!; return self.emit_token(RPAREN);
+		case ']': self.advance()!; return self.emit_token(RBRACK);
 		case '/': return self.lex_comment()!;
 		case '<': return self.lex_contract()!;
 		case '"':
@@ -439,9 +446,9 @@ fn String? Lexer.scan_string(&self)
 }
 
 fn Token? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string()!);
-fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}")!);
-fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")")!);
-fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]")!);
+// fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}")!);
+// fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")")!);
+// fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]")!);
 
 fn Token? Lexer.lex_comment(&self)
 {
