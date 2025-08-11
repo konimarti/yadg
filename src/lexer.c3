@@ -147,7 +147,6 @@ struct Lexer
 	Allocator allocator;
 	InStream f;
 	usz ln, col;
-	usz n;
 	bool eof;
 
 	LexerPosition token_start;
@@ -160,7 +159,7 @@ fn LexerPosition Lexer.pos(&self) => { self.ln, self.col };
 fn Lexer* Lexer.init(&self, Allocator allocator, InStream input)
 {
 	*self = { .allocator = allocator, .f = input,
-		.ln = 1, .col = 1, .n = 0, .eof = false };
+		.ln = 1, .col = 1, .eof = false };
 	self.buf.init(allocator);
 	return self;
 }
@@ -183,22 +182,10 @@ fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '$' |
 
 fn char? Lexer.advance(&self)
 {
-	char? c;
-
 	if (self.buf.len()) return self.buf.pop_first();
 
-	c = self.f.read_byte()!;
-	if (catch err = c)
-	{
-		if (err == io::EOF)
-		{
-			self.eof = true;
-			return 0;
-		}
-		return err?;
-	}
+	char c = self.f.read_byte()!;
 
-	self.n++;
 	self.col++;
 
 	if (is_lf(c))
@@ -207,20 +194,13 @@ fn char? Lexer.advance(&self)
 		self.col = 1;
 	}
 
-	// io::printfn("advance: '%c'", c);
-
 	return c;
 }
 
 fn char? Lexer.peek(&self)
 {
-	char c;
-
 	if (self.buf.len()) return self.buf.first();
-
-	if (self.eof) return 0;
-
-	c = self.advance()!;
+	char c = self.advance()!;
 	self.buf.push(c);
 	return c;
 }
@@ -242,8 +222,25 @@ fn Token Lexer.emit_token(&self, TokenType type, String text = "")
 <*
  Lex the next token.
 *>
-fn Token? Lexer.next(&self) => @pool()
+fn Token? Lexer.next(&self)
 {
+	Token? tok = self._next();
+	if (catch err = tok)
+	{
+		if (err == io::EOF)
+		{
+			self.eof = true;
+			return self.emit_token(EOF);
+		}
+		return err?;
+	}
+	return tok;
+}
+
+fn Token? Lexer._next(&self) @private => @pool()
+{
+	if (self.eof) return self.emit_token(EOF);
+
 	char c;
 
 	self.scan_whitespace()!;
