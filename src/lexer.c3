@@ -265,12 +265,17 @@ fn void? Lexer.scan_whitespace(&self)
 	while ((c = self.peek()!) && is_ws(c)) self.advance()!;
 }
 
-fn String? Lexer.scan_surround(&self, int depth, char open, char close) => @pool()
+<*
+ @require open.len > 0
+ @require close.len > 0
+*>
+fn String? Lexer.scan_surround(&self, int depth, String open, String close) => @pool()
 {
 	DString buf = dstring::temp();
 
+	usz i;
 	char c;
-	while LOOP: ((c = self.peek()!) && depth > 0)
+	while LOOP: ((c = self.peek()!))
 	{
 		switch (c)
 		{
@@ -292,15 +297,29 @@ fn String? Lexer.scan_surround(&self, int depth, char open, char close) => @pool
 			case '`':
 			case '\'':
 				String str = self.scan_string()!;
-				buf.append_char(c);
 				buf.append_chars(str);
-				buf.append_char(c);
 				str.free(self.allocator);
 				continue;
-			case open:
-				depth++;
-			case close:
-				if (--depth == 0) break LOOP;
+			case open[0]:
+				for (i = 0; i < open.len && self.peek()! == open[i]; i++)
+				{
+					buf.append_char(self.advance()!);
+				}
+				if (i == open.len)
+				{
+					depth++;
+				}
+				continue;
+			case close[0]:
+				for (i = 0; i < close.len && self.peek()! == close[i]; i++)
+				{
+					buf.append_char(self.advance()!);
+				}
+				if (i == close.len)
+				{
+					if (--depth == 0) break LOOP;
+				}
+				continue;
 		}
 		buf.append_char(self.advance()!);
 	}
@@ -344,25 +363,19 @@ fn Token? Lexer.lex_string(&self)
 
 fn Token? Lexer.lex_brace(&self)
 {
-	self.advance()!; // Consume '{'
-	String text = self.scan_surround(1, '{', '}')!;
-	self.advance()!; // Consume '}'
+	String text = self.scan_surround(0, "{", "}")!;
 	return { .type = BRACE, .text = text};
 }
 
 fn Token? Lexer.lex_paren(&self)
 {
-	self.advance()!; // Consume '('
-	String text = self.scan_surround(1, '(', ')')!;
-	self.advance()!; // Consume ')'
+	String text = self.scan_surround(0, "(", ")")!;
 	return { .type = PAREN, .text = text};
 }
 
 fn Token? Lexer.lex_brack(&self)
 {
-	self.advance()!; // Consume '['
-	String text = self.scan_surround(1, '[', ']')!;
-	self.advance()!; // Consume ']'
+	String text = self.scan_surround(0, "[", "]")!;
 	return { .type = BRACK, .text = text};
 }
 
@@ -386,26 +399,9 @@ fn String? Lexer.scan_line_comment(&self) => @pool()
 	return text.str_view().copy(self.allocator);
 }
 
-fn String? Lexer.scan_block_comment(&self) => @pool()
+fn String? Lexer.scan_block_comment(&self)
 {
-	char c;
-	DString text = dstring::temp();
-	while LOOP: (c = self.peek()!)
-	{
-		if (c == '*')
-		{
-			self.advance()!; // Consume '*';
-			if (self.peek()! == '/')
-			{
-				self.advance()!; // Consume '/';
-				break LOOP;
-			}
-			text.append_char('*');
-			continue;
-		}
-		text.append_char(self.advance()!);
-	}
-	return text.str_view().copy(self.allocator);
+	return self.scan_surround(1, "/*", "*/")!;
 }
 
 fn Token? Lexer.lex_contract(&self)
