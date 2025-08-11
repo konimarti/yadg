@@ -91,9 +91,9 @@ fn usz? Token.to_format(&self, Formatter *f) @dynamic
 {
 	usz n;
 	n += f.printf("%s ", self.range)!;
-	if (n < 10) n += f.printf("%*c", 10 - n, ' ')!;
+	if (n < 9) n += f.printf("%*c", 9 - n, ' ')!;
 	n += f.printf("[%s]", self.type)!;
-	if (n < 21) n += f.printf("%*c", 21 - n, ' ')!;
+	if (n < 20) n += f.printf("%*c", 20 - n, ' ')!;
 	if (self.text.len)
 	{
 		@pool() {
@@ -122,11 +122,11 @@ fn usz? LexerRange.to_format(&self, Formatter *f) @dynamic
 {
 	if (self.start.ln == self.end.ln)
 	{
-		return f.printf("L:%d", self.start.ln)!;
+		return f.printf("L%d", self.start.ln)!;
 	}
 	else
 	{
-		return f.printf("L:%d-%d", self.start.ln, self.end.ln)!;
+		return f.printf("L%d-%d", self.start.ln, self.end.ln)!;
 	}
 }
 
@@ -262,59 +262,49 @@ fn Token? Lexer.next(&self) => @pool()
 		case '^': self.advance()!; return self.emit_token(XOR);
 		case ':':
 			self.advance()!; // Consuem ':'
+			TokenType type = COMMA;
 			if (self.peek()! == ':')
 			{
 				self.advance()!; // Consume ':'
-				return { .type = SCOPE };
+				type = SCOPE;
 			}
-			else
-			{
-				return { .type = COMMA };
-			};
+			return self.emit_token(type);
 		case '!':
 			self.advance()!; // Consuem '!'
+			TokenType type = EXCLAM;
 			if (self.peek()! == '!')
 			{
 				self.advance()!; // Consume '!'
-				return { .type = UNWRAP };
+				type = UNWRAP;
 			}
-			else
-			{
-				return { .type = EXCLAM };
-			};
+			return self.emit_token(type);
 		case '?':
 			self.advance()!; // Consuem '?'
+			TokenType type = QUESTION;
 			if (self.peek()! == '?')
 			{
 				self.advance()!; // Consume '?'
-				return { .type = EMPTYOPT };
+				type = EMPTYOPT;
 			}
-			else
-			{
-				return { .type = QUESTION };
-			};
+			return self.emit_token(type);
 		case '|':
 			self.advance()!; // Consume '|'
+			TokenType type = PIPE;
 			if (self.peek()! == '|')
 			{
 				self.advance()!; // Consume '|'
-				return { .type = OR };
+				type = OR;
 			}
-			else
-			{
-				return { .type = PIPE };
-			};
+			return self.emit_token(type);
 		case '&':
 			self.advance()!; // Consuem '&'
+			TokenType type = AMP;
 			if (self.peek()! == '&')
 			{
 				self.advance()!; // Consume '&'
-				return { .type = AND };
+				type = AND;
 			}
-			else
-			{
-				return { .type = AMP };
-			};
+			return self.emit_token(type);
 		case '=':
 			self.advance()!;
 			TokenType type;
@@ -448,28 +438,10 @@ fn String? Lexer.scan_string(&self)
 	return buf.str_view().copy(self.allocator);
 }
 
-fn Token? Lexer.lex_string(&self)
-{
-	return self.emit_token(STRING, self.scan_string()!);
-}
-
-fn Token? Lexer.lex_brace(&self)
-{
-	String text = self.scan_surround(0, "{", "}")!;
-	return self.emit_token(BRACE, text);
-}
-
-fn Token? Lexer.lex_paren(&self)
-{
-	String text = self.scan_surround(0, "(", ")")!;
-	return self.emit_token(PAREN, text);
-}
-
-fn Token? Lexer.lex_brack(&self)
-{
-	String text = self.scan_surround(0, "[", "]")!;
-	return self.emit_token(BRACK, text);
-}
+fn Token? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string()!);
+fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}")!);
+fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")")!);
+fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]")!);
 
 fn Token? Lexer.lex_comment(&self)
 {

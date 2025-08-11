@@ -102,6 +102,7 @@ fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 		File f = file::open_path(path, "r")!;
 		defer (void)f.close();
 
+		io::printfn("-- scanning file: %s", path.str_view());
 		if (try scan_tokens(&f))
 		{
 			report.pass++;
