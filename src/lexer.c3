@@ -8,60 +8,133 @@ faultdef INVALID_CHAR;
 
 enum TokenType
 {
+	// Operators
 	TILDE,     // ~
-	XOR,       // ^
 	QUESTION,  // ?
 	EMPTYOPT,  // ??
+	XOR,       // ^
 	EXCLAM,    // !
 	UNWRAP,    // !!
 	PIPE,      // |
-	OR,        // ||
 	AMP,       // &
 	AND,       // &&
+	OR,        // ||
 	PLUS,      // +
 	MINUS,     // -
 	STAR,      // *
 	DIV,       // /
 	MODULUS,   // %
-	ATTRIBUTE, // @
+	RSHIFT,    // >>
+	LSHIFT,    // <<
+	ASSIGN,	   // =
+
+	// Punctuation
 	SEMICOLON, // ;
 	COLON,	   // :
 	SCOPE,	   // ::
 	COMMA,	   // ,
 	DOT,	   // .
+
+	// Structure
 	BRACE,     // { }
-	PAREN,     // (
+	PAREN,     // ( )
 	BRACK,	   // [ ]
-	ASSIGN,	   // =
-	EQUAL,	   // ==
 	ARROW,     // =>
+
+	// Comparison
+	EQUAL,	   // ==
 	LESS,      // <
 	LESSEQ,    // <=
 	GREATER,   // >
 	GREATEREQ, // >=
-	RSHIFT,    // >>
-	LSHIFT,    // <<
-	CONTRACT,    // <* *>
+
+	// Comments and Contracts
+	CONTRACT,  // <* *>
 	LNCOMM,    // Line comment //
 	BLCOMM,    // Block comment /* */
+
+	// Identifiers and Strings
 	IDENT,	   // Identifiers (`module`, `fn`, `macro`, etc. )
 	STRING,    // "..", '..', `..`
-	FUNC,
-	MACRO,
-	MODULE,
-	CONST,
-	ALIAS,
-	ENUM,
-	STRUCT,
-	FAULTDEF,
+
+	// Keywords
+	ATTRIBUTE, // @
+	FUNC,      // fn
+	MACRO,     // macro
+	MODULE,    // module
+	IMPORT,    // import
+	CONST,     // const
+	ALIAS,     // alias
+	TYPEDEF,   // typedef
+	ENUM,      // enum
+	STRUCT,    // struct
+	BITSTRUCT, // bitstruct
+	FAULTDEF,  // faultdef
+	IF,        // if
+	ELSE,      // else
+	WHILE,     // while
+	FOR,       // for
+	FOREACH,   // foreach
+	FOREACHR,  // foreachr
 	EOF
 }
 
-struct Token
+struct Token (Printable)
 {
-	TokenType type;
-	String    text;
+	TokenType  type;
+	String     text;
+	LexerRange range;
+	Allocator  allocator;
 }
+
+fn usz? Token.to_format(&self, Formatter *f) @dynamic
+{
+	usz n;
+	n += f.printf("%s ", self.range)!;
+	if (n < 10) n += f.printf("%*c", 10 - n, ' ')!;
+	n += f.printf("[%s]", self.type)!;
+	if (n < 21) n += f.printf("%*c", 21 - n, ' ')!;
+	if (self.text.len)
+	{
+		@pool() {
+			n += f.printf(" %s", self.text.trim().tescape(true))!;
+		};
+	}
+
+	return n;
+}
+
+
+fn void Token.free(&self)
+{
+	if (!self.allocator) return;
+	self.text.free(self.allocator);
+	*self = {};
+}
+
+struct LexerRange (Printable)
+{
+	LexerPosition start;
+	LexerPosition end;
+}
+
+fn usz? LexerRange.to_format(&self, Formatter *f) @dynamic
+{
+	if (self.start.ln == self.end.ln)
+	{
+		return f.printf("L:%d", self.start.ln)!;
+	}
+	else
+	{
+		return f.printf("L:%d-%d", self.start.ln, self.end.ln)!;
+	}
+}
+
+struct LexerPosition
+{
+	usz ln, col;
+}
+fn LexerRange LexerPosition.sub(&self, LexerPosition start) @operator(-) => { start, *self };
 
 alias CharList = List { char };
 
@@ -73,8 +146,12 @@ struct Lexer
 	usz n;
 	bool eof;
 
+	LexerPosition token_start;
+
 	CharList buf;
 }
+
+fn LexerPosition Lexer.pos(&self) => { self.ln, self.col };
 
 fn Lexer* Lexer.init(&self, Allocator allocator, InStream input)
 {
@@ -90,7 +167,6 @@ fn void Lexer.free(&self)
 	self.buf.free();
 	*self = {};
 }
-
 
 fn void Lexer.report_error(&self, String msg)
 {
@@ -146,6 +222,20 @@ fn char? Lexer.peek(&self)
 }
 
 <*
+ Emit token from lexer.
+*>
+fn Token Lexer.emit_token(&self, TokenType type, String text = "")
+{
+	Token tok = {
+		.type  = type,
+		.text  = text,
+		.range = self.pos() - self.token_start,
+		.allocator = self.allocator
+	};
+	return tok;
+}
+
+<*
  Lex the next token.
 *>
 fn Token? Lexer.next(&self) => @pool()
@@ -154,20 +244,22 @@ fn Token? Lexer.next(&self) => @pool()
 
 	self.scan_whitespace()!;
 
+	self.token_start = self.pos();
+
 	c = self.peek()!;
 
 	switch (c)
 	{
-		case '@': self.advance()!; return { .type = ATTRIBUTE };
-		case ';': self.advance()!; return { .type = SEMICOLON };
-		case ',': self.advance()!; return { .type = COMMA };
-		case '.': self.advance()!; return { .type = DOT };
-		case '+': self.advance()!; return { .type = PLUS };
-		case '-': self.advance()!; return { .type = MINUS };
-		case '*': self.advance()!; return { .type = STAR };
-		case '%': self.advance()!; return { .type = MODULUS };
-		case '~': self.advance()!; return { .type = TILDE };
-		case '^': self.advance()!; return { .type = XOR };
+		case '@': self.advance()!; return self.emit_token(ATTRIBUTE);
+		case ';': self.advance()!; return self.emit_token(SEMICOLON);
+		case ',': self.advance()!; return self.emit_token(COMMA);
+		case '.': self.advance()!; return self.emit_token(DOT);
+		case '+': self.advance()!; return self.emit_token(PLUS);
+		case '-': self.advance()!; return self.emit_token(MINUS);
+		case '*': self.advance()!; return self.emit_token(STAR);
+		case '%': self.advance()!; return self.emit_token(MODULUS);
+		case '~': self.advance()!; return self.emit_token(TILDE);
+		case '^': self.advance()!; return self.emit_token(XOR);
 		case ':':
 			self.advance()!; // Consuem ':'
 			if (self.peek()! == ':')
@@ -232,7 +324,7 @@ fn Token? Lexer.next(&self) => @pool()
 				case '=': self.advance()!; type = EQUAL;
 				default : type = ASSIGN;
 			}
-			return { .type = type };
+			return self.emit_token(type);
 		case '>':
 			self.advance()!;
 			TokenType type;
@@ -242,7 +334,7 @@ fn Token? Lexer.next(&self) => @pool()
 				case '=': self.advance()!; type = GREATEREQ;
 				default : type = GREATER;
 			}
-			return { .type = type };
+			return self.emit_token(type);
 		case '{': return self.lex_brace()!;
 		case '(': return self.lex_paren()!;
 		case '[': return self.lex_brack()!;
@@ -358,25 +450,25 @@ fn String? Lexer.scan_string(&self)
 
 fn Token? Lexer.lex_string(&self)
 {
-	return { .type = STRING, .text = self.scan_string()!};
+	return self.emit_token(STRING, self.scan_string()!);
 }
 
 fn Token? Lexer.lex_brace(&self)
 {
 	String text = self.scan_surround(0, "{", "}")!;
-	return { .type = BRACE, .text = text};
+	return self.emit_token(BRACE, text);
 }
 
 fn Token? Lexer.lex_paren(&self)
 {
 	String text = self.scan_surround(0, "(", ")")!;
-	return { .type = PAREN, .text = text};
+	return self.emit_token(PAREN, text);
 }
 
 fn Token? Lexer.lex_brack(&self)
 {
 	String text = self.scan_surround(0, "[", "]")!;
-	return { .type = BRACK, .text = text};
+	return self.emit_token(BRACK, text);
 }
 
 fn Token? Lexer.lex_comment(&self)
@@ -385,9 +477,9 @@ fn Token? Lexer.lex_comment(&self)
 
 	switch (self.peek()!)
 	{
-		case '/': self.advance()!; return { .type = LNCOMM, .text = self.scan_line_comment()!};
-		case '*': self.advance()!; return { .type = BLCOMM, .text = self.scan_block_comment()!};
-		default: return { .type = DIV };
+		case '/': self.advance()!; return self.emit_token(LNCOMM, self.scan_line_comment()!);
+		case '*': self.advance()!; return self.emit_token(BLCOMM, self.scan_block_comment()!);
+		default: return self.emit_token(DIV);
 	}
 }
 
@@ -399,10 +491,7 @@ fn String? Lexer.scan_line_comment(&self) => @pool()
 	return text.str_view().copy(self.allocator);
 }
 
-fn String? Lexer.scan_block_comment(&self)
-{
-	return self.scan_surround(1, "/*", "*/")!;
-}
+fn String? Lexer.scan_block_comment(&self) => self.scan_surround(1, "/*", "*/")!;
 
 fn Token? Lexer.lex_contract(&self)
 {
@@ -414,16 +503,16 @@ fn Token? Lexer.lex_contract(&self)
 	if (self.peek()! == '<')
 	{
 		self.advance()!;
-		return { .type = LSHIFT };
+		return self.emit_token(LSHIFT);
 	}
 	if (self.peek()! == '=')
 	{
 		self.advance()!;
-		return { .type = LESSEQ };
+		return self.emit_token(LESSEQ);
 	}
 	if (self.peek()! != '*')
 	{
-		return { .type = LESS };
+		return self.emit_token(LESS);
 	}
 
 	self.advance()!; // Consume '*';
@@ -443,7 +532,7 @@ fn Token? Lexer.lex_contract(&self)
 		}
 		text.append_char(self.advance()!);
 	}
-	return { .type = CONTRACT, .text = text.str_view().copy(self.allocator) };
+	return self.emit_token(CONTRACT, text.str_view().copy(self.allocator));
 }
 
 fn Token? Lexer.lex_ident(&self) => @pool()
@@ -455,15 +544,25 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 	String str = text.str_view().copy(self.allocator);
 	switch (str)
 	{
-		case "fn":       return { .type = FUNC, .text = str };
-		case "macro":    return { .type = MACRO, .text = str };
-		case "module":   return { .type = MODULE, .text = str };
-		case "const":    return { .type = CONST, .text = str };
-		case "alias":    return { .type = ALIAS, .text = str };
-		case "enum":     return { .type = ENUM, .text = str };
-		case "struct":   return { .type = STRUCT, .text = str };
-		case "faultdef": return { .type = FAULTDEF, .text = str };
-		default:         return { .type = IDENT, .text = str };
+		// Keywords
+		case "fn":        return self.emit_token(FUNC, str);
+		case "macro":     return self.emit_token(MACRO, str);
+		case "module":    return self.emit_token(MODULE, str);
+		case "import":    return self.emit_token(IMPORT, str);
+		case "const":     return self.emit_token(CONST, str);
+		case "alias":     return self.emit_token(ALIAS, str);
+		case "typedef":   return self.emit_token(TYPEDEF, str);
+		case "enum":      return self.emit_token(ENUM, str);
+		case "struct":    return self.emit_token(STRUCT, str);
+		case "bitstruct": return self.emit_token(BITSTRUCT, str);
+		case "faultdef":  return self.emit_token(FAULTDEF, str);
+		case "if":        return self.emit_token(IF, str);
+		case "else":      return self.emit_token(ELSE, str);
+		case "while":     return self.emit_token(WHILE, str);
+		case "for":       return self.emit_token(FOR, str);
+		case "foreach":   return self.emit_token(FOREACH, str);
+		case "foreach_r": return self.emit_token(FOREACHR, str);
+		default:          return self.emit_token(IDENT, str);
 	}
 }
 

@@ -132,8 +132,9 @@ fn void? scan_tokens(InStream input) => @pool()
 			}
 			return err?;
 		}
-		io::printf("Token [%9s]", tok.type);
-		if (tok.text.len) io::printf(": %s", tok.text.trim());
-		io::printn("");
+		io::printn(tok);
+		// io::printf("Token [%9s]", tok.type);
+		// if (tok.text.len) io::printf(": %s", tok.text.trim());
+		// io::printn("");
 	}
 }
