@@ -10,9 +10,9 @@ enum AstType
 {
 	AST_DOCUMENT,
 	AST_MODULE,
-	AST_GLOBAL,
-	AST_BLOCK, // enum, bitstruct
+	AST_BLOCK,
 	AST_CALL,
+	AST_GLOBAL,
 	AST_ATTRIBUTE,
 	AST_BRACE,
 	AST_PAREN
@@ -26,27 +26,91 @@ struct AstNode (Printable)
 	AstType type;
 	union
 	{
-		struct document {
-			AstList children;
+		struct document
+		{
+			AstList modules;
 		}
-		struct module_node {
+		struct module_node
+		{
 			StringList path;
 			AstList    attr;
+
+			// Children
+			AstList    globals;
+			AstList    calls;
+			AstList    blocks;
 		}
-		struct block {
+		struct block
+		{
+			String     name;
 			StringList decls;
 			AstNode*   brace;
+			AstList    methods;
 		}
-		struct call {
-			String     receiver;
+		struct call
+		{
+			String     receiver; // blocks and typedefs can be receivers
 		        String     name;
 			StringList decls;
 		}
+		struct glob
+		{
+			StringList decls;
+			AstList    methods;  // typedef can have methods
+		}
 		String     term;
-		StringList terms;
 	}
 	String comment;
 }
+
+fn AstNode*? document(Allocator allocator, YadgParser *parser)
+{
+	AstNode* node = allocator::new(allocator, AstNode);
+	node.type = AST_DOCUMENT;
+	node.document.modules.init(allocator);
+
+	Token tok;
+	while LOOP: (true)
+	{
+		tok = parser.peek();
+		switch(tok.type)
+		{
+			case CONTRACT:
+			case LCOMMENT:
+			case BCOMMENT:
+				parser.last_comment.free();
+				parser.last_comment = { tok.range.end.ln, format_comment(tmem, tok.lexeme()), tmem };
+			case MODULE:
+				node.document.modules.push(module_node(allocator, parser)!);
+				continue;
+			case STRUCT:
+			case ENUM:
+			case BITSTRUCT:
+				AstNode *current_module = node.document.modules.last()!;
+				current_module.module_node.blocks.push(block(allocator, parser)!);
+				continue;
+			case ALIAS:
+			case TYPEDEF:
+			case CONST:
+				AstNode *current_module = node.document.modules.last()!;
+				current_module.module_node.globals.push(global(allocator, parser)!);
+				continue;
+			case FUNC:
+			case MACRO:
+				AstNode *current_module = node.document.modules.last()!;
+				current_module.module_node.calls.push(fncall(allocator, parser)!);
+				continue;
+			case EOF:
+				break LOOP;
+			default:
+				// Ingore and continue
+		}
+		parser.advance()!;
+	}
+
+	return node;
+}
+
 
 fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 {
@@ -55,9 +119,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 	switch (self.type)
 	{
 		case AST_DOCUMENT:
-			n += f.printf("DOCUMENT START\n\n")!;
-			foreach (child : self.document.children) n += f.printf("%s\n", child)!;
-			n += f.printf("\nDOCUMENT END\n")!;
+			foreach (child : self.document.modules) n += f.printf("%s\n", child)!;
 
 		case AST_MODULE:
 			n += f.printf("## ")!;
@@ -72,15 +134,19 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			n += f.printf("\n\n")!;
 			if (self.comment.len) n += f.printf("%s\n", self.comment)!;
 
+			foreach (global : self.module_node.globals) io::printf("%s\n", global);
+			foreach (call : self.module_node.calls) io::printf("%s\n", call);
+			foreach (block : self.module_node.blocks) io::printf("%s\n", block);
+
 		case AST_GLOBAL:
-			if (self.terms.len() < 2) return INVALID_AST?;
-			n += f.printf("### %s", self.terms[1])!;
+			if (self.glob.decls.len() < 2) return INVALID_AST?;
+			n += f.printf("### %s", self.glob.decls[1])!;
 			n += f.printf("\n\n")!;
 			if (self.comment.len) n += f.printf("%s\n\n", self.comment)!;
 			n += f.printf("```\n")!;
-			foreach (i, term : self.terms)
+			foreach (i, decl : self.glob.decls)
 			{
-				n += f.printf("%s%s", (i > 0 ? " " : ""), term)!;
+				n += f.printf("%s%s", (i > 0 ? " " : ""), decl)!;
 			}
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
@@ -132,51 +198,6 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 	return n;
 }
 
-fn AstNode*? document(Allocator allocator, YadgParser *parser)
-{
-	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_DOCUMENT;
-	node.document.children.init(allocator);
-
-	Token tok;
-	while LOOP: (true)
-	{
-		tok = parser.peek();
-		switch(tok.type)
-		{
-			case CONTRACT:
-			case LCOMMENT:
-			case BCOMMENT:
-				parser.last_comment.free();
-				parser.last_comment = { tok.range.end.ln, format_comment(tmem, tok.lexeme()), tmem };
-			case MODULE:
-				node.document.children.push(module_node(allocator, parser)!);
-				continue;
-			case STRUCT:
-			case ENUM:
-			case BITSTRUCT:
-				node.document.children.push(block(allocator, parser)!);
-				continue;
-			case ALIAS:
-			case TYPEDEF:
-			case CONST:
-				node.document.children.push(global(allocator, parser)!);
-				continue;
-			case FUNC:
-			case MACRO:
-				node.document.children.push(fncall(allocator, parser)!);
-				continue;
-			case EOF:
-				break LOOP;
-			default:
-				// Ingore and continue
-		}
-		parser.advance()!;
-	}
-
-	return node;
-}
-
 fn void AstNode.assign_comment(&self, Allocator allocator, YadgParser *parser)
 {
 	self.comment = parser.find_comment().copy(allocator) ?? "";
@@ -190,6 +211,9 @@ fn AstNode*? module_node(Allocator allocator, YadgParser *parser)
 
 	node.module_node.path.init(allocator);
 	node.module_node.attr.init(allocator);
+	node.module_node.globals.init(allocator);
+	node.module_node.calls.init(allocator);
+	node.module_node.blocks.init(allocator);
 	node.assign_comment(allocator, parser);
 
 	if (!parser.expect(TokenType.MODULE)!) return INVALID_AST?;
@@ -215,14 +239,14 @@ fn AstNode*? global(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_GLOBAL;
-	node.terms.init(allocator);
+	node.glob.decls.init(allocator);
 	node.assign_comment(allocator, parser);
 
 	while (parser.peek().type != TokenType.SEMICOLON)
 	{
 		if (parser.peek().type == EOF) return INVALID_AST?;
 		String lexeme = parser.advance()!.lexeme().copy(allocator);
-		node.terms.push(lexeme);
+		node.glob.decls.push(lexeme);
 	}
 
 	return node;
