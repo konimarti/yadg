@@ -11,9 +11,9 @@ enum AstType
 	AST_DOCUMENT,
 	AST_MODULE,
 	AST_GLOBAL,
-	// AST_STRUCT,
 	AST_BLOCK_DECL, // enum, bitstruct
-	AST_BLOCK, // enum, bitstruct
+	AST_BLOCK,
+	AST_CALL,
 	AST_ATTRIBUTE,
 	AST_PAREN
 }
@@ -33,14 +33,14 @@ struct AstNode (Printable)
 			StringList path;
 			AstList    attr;
 		}
-		struct struct_node {
-			String   name;
-			AstList  attr;
-			AstNode* paren;
-		}
 		struct block {
 			StringList decls;
 			AstNode*   block;
+		}
+		struct call {
+			String     receiver;
+		        String     name;
+			StringList decls;
 		}
 		String     term;
 		StringList terms;
@@ -85,17 +85,6 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
 
-		// case AST_STRUCT:
-		// 	n += f.printf("### %s", self.struct_node.name)!;
-		// 	n += f.printf("\n\n")!;
-		// 	if (self.comment.len) n += f.printf("%s\n\n", self.comment)!;
-		// 	n += f.printf("```\n")!;
-		// 	n += f.printf("struct %s", self.struct_node.name)!;
-		// 	foreach (attr : self.struct_node.attr) n += f.printf(" %s", attr)!;
-		// 	if (self.struct_node.paren) n += f.printf(" %s", self.struct_node.paren)!;
-		// 	n += f.printf("\n")!;
-		// 	n += f.printf("```\n")!;
-
 		case AST_BLOCK_DECL:
 			if (self.block.decls.len() < 2) return INVALID_AST?;
 			n += f.printf("### %s", self.block.decls[1])!;
@@ -108,6 +97,25 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			}
 			n += f.printf("\n")!;
 			n += f.printf("%s", self.block.block)!;
+			n += f.printf("\n")!;
+			n += f.printf("```\n")!;
+
+		case AST_CALL:
+			if (self.call.receiver.len)
+			{
+				n += f.printf("### %s.%s", self.call.receiver, self.call.name)!;
+			}
+			else
+			{
+				n += f.printf("### %s", self.call.name)!;
+			}
+			n += f.printf("\n\n")!;
+			if (self.comment.len) n += f.printf("%s\n", self.comment)!;
+			n += f.printf("```\n")!;
+			foreach (i, decl : self.call.decls)
+			{
+				n += f.printf("%s%s", (i > 0 ? " " : ""), decl)!;
+			}
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
 
@@ -155,8 +163,10 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 				node.document.children.push(global(allocator, parser)!);
 				continue;
 			case FUNC:
+				node.document.children.push(fncall(allocator, parser)!);
+				continue;
 			case MACRO:
-				// TODO self.parse_call()!;
+				// TODO
 				break;
 			case EOF:
 				break LOOP;
@@ -220,33 +230,6 @@ fn AstNode*? global(Allocator allocator, YadgParser *parser)
 	return node;
 }
 
-// struct Name [attr(..) ..] [(..)] {..}
-// fn AstNode*? struct_node(Allocator allocator, YadgParser *parser)
-// {
-// 	AstNode* node = allocator::new(allocator, AstNode);
-// 	node.type = AST_STRUCT;
-//
-// 	node.struct_node.attr.init(allocator);
-// 	node.assign_comment(allocator, parser);
-//
-// 	if (!parser.expect(TokenType.STRUCT)!) return INVALID_AST?;
-//
-// 	if (parser.peek().type != TokenType.IDENT) return INVALID_AST?;
-// 	node.struct_node.name = parser.advance()!.lexeme().copy(allocator);
-//
-// 	while (parser.peek().type == TokenType.ATTRIBUTE)
-// 	{
-// 		node.struct_node.attr.push(attr(allocator, parser)!);
-// 	}
-//
-// 	if (parser.peek().type == TokenType.PAREN)
-// 	{
-// 		node.struct_node.paren = paren(allocator, parser)!;
-// 	}
-//
-// 	return node;
-// }
-
 // [ enum  | bitstruct ] Name : ["const"] ["inline"] $BackingType [attr(..) ..] [(..)] {..}
 fn AstNode*? block_decl(Allocator allocator, YadgParser *parser)
 {
@@ -264,6 +247,75 @@ fn AstNode*? block_decl(Allocator allocator, YadgParser *parser)
 	}
 
 	node.block.block = block(allocator, parser)!;
+
+	return node;
+}
+
+//  fn $ReturnType [Receiver.] Call "(" .. ")" [Attr..]  ( "{" .. "}" | ";" )
+fn AstNode*? fncall(Allocator allocator, YadgParser *parser)
+{
+	String lexeme, receiver, name;
+
+	AstNode* node = allocator::new(allocator, AstNode);
+	node.type = AST_CALL;
+
+	node.call.decls.init(allocator);
+	node.assign_comment(allocator, parser);
+
+	bool is_macro = parser.peek().type == TokeType.MACRO;
+
+	if (parser.peek().type == TokenType.FUNC || is_macro)
+	{
+		lexeme = parser.advance()!.lexeme().copy(allocator);
+		node.call.decls.push(lexeme);
+	}
+	else
+	{
+		return INVALID_AST?;
+	}
+
+	// Return type
+	if (parser.peek().type != TokenType.IDENT)
+	{
+		return INVALID_AST?;
+	}
+	node.call.decls.push(parser.advance()!.lexeme().copy(allocator));
+
+	// Receiver or call name
+	if (parser.peek().type != TokenType.IDENT)
+	{
+		io::printfn("Btoken got: %s", parser.peek() );
+		return INVALID_AST?;
+	}
+	name = parser.advance()!.lexeme().copy(allocator);
+
+	if (parser.peek().type == TokenType.DOT)
+	{
+		receiver = name;
+		parser.advance()!; // Consume DOT
+		if (parser.peek().type != TokenType.IDENT) return INVALID_AST?;
+		name = parser.advance()!.lexeme().copy(allocator);
+	}
+
+	// Write to decls
+	node.call.name = name;
+	if (receiver.len)
+	{
+		node.call.receiver = receiver;
+		node.call.decls.push(string::format(allocator, "%s.%s", receiver, name));
+	}
+	else
+	{
+		node.call.decls.push(name);
+	}
+
+
+	while (parser.peek().type != TokenType.BRACE && parser.peek().type != TokenType.SEMICOLON)
+	{
+		if (parser.peek().type == EOF) return INVALID_AST?;
+		lexeme = parser.advance()!.lexeme().copy(allocator);
+		node.call.decls.push(lexeme);
+	}
 
 	return node;
 }
@@ -328,22 +380,3 @@ fn String format_comment(Allocator allocator, String str) => @pool()
 
 	return builder.copy_str(allocator);
 }
-
-/*
-Parser needs the following:
-
-bool Parser.expect(TokenType)
-Expression() -- is terminated by semicolon
-	module IDENT [SCOPE IDENT] [ATTRIBUTE ..] SEMICOLON
-	const IDENT ASSIGN [fn, xxx]
-
-Module() -- handle module  until semicolon;
-Const() -- handle const until semicolon;
-Struct() -- handle block
-	struct IDENT [LPAREN IDENT RPARENT] [ATTRIBUTE [ [LPAREN] IDENT [RPAREN] ] ]
-	LCURLY
-		IDENT* SEMICOLON [LNCOMM]
-	RCURLY
-
-*/
-
