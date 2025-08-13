@@ -6,19 +6,24 @@ import std::io;
 
 struct Comment
 {
-	usz end_ln; // Comment ends at lineno
-	String comment;
+	usz       end_ln; // Comment ends at lineno
+	String    comment;
+	Allocator allocator;
 }
 
-alias CommentStack = List { Comment };
+fn void Comment.free(&self)
+{
+	if (!self.allocator) return;
+	self.comment.free(self.allocator);
+}
 
 struct YadgParser
 {
 	Lexer        lexer;
 	Token        next_token;
+	Comment      last_comment;
 	OutStream    output;
 	String       path_prefix;
-	CommentStack stack;
 	Allocator    allocator;
 }
 
@@ -27,7 +32,6 @@ fn YadgParser* YadgParser.init(&self, Allocator allocator, OutStream output, Str
 	*self = {
 		.output      = output,
 		.path_prefix = prefix,
-		.stack       = *(CommentStack){}.init(allocator),
 		.allocator   = allocator
 	};
 	return self;
@@ -36,7 +40,7 @@ fn YadgParser* YadgParser.init(&self, Allocator allocator, OutStream output, Str
 fn void YadgParser.free(&self)
 {
 	if (!self.allocator) return;
-	self.stack.free();
+	self.last_comment.free();
 	*self = {};
 }
 
@@ -50,21 +54,19 @@ fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
 	AstNode *doc = document(self.allocator, self)!;
 
 	// Release unused resources
-	self.stack.clear();
+	self.last_comment.free();
+	self.last_comment = {};
 	self.next_token = {};
 	self.lexer = {};
 
 	return doc;
 }
 
-fn String? YadgParser.find_adjacent_comment(&self, Allocator allocator, Token current_token)
+fn String? YadgParser.find_comment(&self)
 {
-	String comment;
-	if (try tok = self.stack.last() && current_token.range.start.ln - tok.end_ln < 2)
+	if (self.peek().range.start.ln - self.last_comment.end_ln < 2)
 	{
-		comment = tok.comment.copy(allocator);
-		(void)self.stack.pop();
-		return comment;
+		return self.last_comment.comment;
 	}
 	return NOT_FOUND?;
 }

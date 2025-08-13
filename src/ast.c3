@@ -11,7 +11,9 @@ enum AstType
 	AST_DOCUMENT,
 	AST_MODULE,
 	AST_GLOBAL,
-	AST_STRUCT,
+	// AST_STRUCT,
+	AST_BLOCK_DECL, // enum, bitstruct
+	AST_BLOCK, // enum, bitstruct
 	AST_ATTRIBUTE,
 	AST_PAREN
 }
@@ -36,12 +38,12 @@ struct AstNode (Printable)
 			AstList  attr;
 			AstNode* paren;
 		}
-		String     ident;
-		StringList terms;
-		// Terminal AST node
-		struct paren {
-			String   content;
+		struct block {
+			StringList decls;
+			AstNode*   block;
 		}
+		String     term;
+		StringList terms;
 	}
 	String comment;
 }
@@ -56,6 +58,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			n += f.printf("DOCUMENT START\n\n")!;
 			foreach (child : self.document.children) n += f.printf("%s\n", child)!;
 			n += f.printf("\nDOCUMENT END\n")!;
+
 		case AST_MODULE:
 			n += f.printf("## ")!;
 			foreach (i, path : self.module_node.path)
@@ -68,6 +71,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			}
 			n += f.printf("\n\n")!;
 			if (self.comment.len) n += f.printf("%s\n", self.comment)!;
+
 		case AST_GLOBAL:
 			if (self.terms.len() < 2) return INVALID_AST?;
 			n += f.printf("### %s", self.terms[1])!;
@@ -80,20 +84,41 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			}
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
-		case AST_STRUCT:
-			n += f.printf("### %s", self.struct_node.name)!;
+
+		// case AST_STRUCT:
+		// 	n += f.printf("### %s", self.struct_node.name)!;
+		// 	n += f.printf("\n\n")!;
+		// 	if (self.comment.len) n += f.printf("%s\n\n", self.comment)!;
+		// 	n += f.printf("```\n")!;
+		// 	n += f.printf("struct %s", self.struct_node.name)!;
+		// 	foreach (attr : self.struct_node.attr) n += f.printf(" %s", attr)!;
+		// 	if (self.struct_node.paren) n += f.printf(" %s", self.struct_node.paren)!;
+		// 	n += f.printf("\n")!;
+		// 	n += f.printf("```\n")!;
+
+		case AST_BLOCK_DECL:
+			if (self.block.decls.len() < 2) return INVALID_AST?;
+			n += f.printf("### %s", self.block.decls[1])!;
 			n += f.printf("\n\n")!;
-			if (self.comment.len) n += f.printf("%s\n\n", self.comment)!;
+			if (self.comment.len) n += f.printf("%s\n", self.comment)!;
 			n += f.printf("```\n")!;
-			n += f.printf("struct %s", self.struct_node.name)!;
-			foreach (attr : self.struct_node.attr) n += f.printf(" %s", attr)!;
-			if (self.struct_node.paren) n += f.printf(" %s", self.struct_node.paren)!;
+			foreach (i, decl : self.block.decls)
+			{
+				n += f.printf("%s%s", (i > 0 ? " " : ""), decl)!;
+			}
+			n += f.printf("\n")!;
+			n += f.printf("%s", self.block.block)!;
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
+
 		case AST_ATTRIBUTE:
-			n += f.print(self.ident)!;
+			n += f.print(self.term)!;
+
 		case AST_PAREN:
-			n += f.print(self.paren.content)!;
+			n += f.print(self.term)!;
+
+		case AST_BLOCK:
+			n += f.print(self.term)!;
 	}
 
 	return n;
@@ -114,16 +139,15 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 			case CONTRACT:
 			case LCOMMENT:
 			case BCOMMENT:
-				parser.stack.push((Comment){tok.range.end.ln, tok.lexeme().treplace("\t", "").tcopy()});
+				parser.last_comment.free();
+				parser.last_comment = { tok.range.end.ln, format_comment(tmem, tok.lexeme()), tmem };
 			case MODULE:
 				node.document.children.push(module_node(allocator, parser)!);
 				continue;
+			case STRUCT:
 			case ENUM:
 			case BITSTRUCT:
-				// TODO
-				break;
-			case STRUCT:
-				node.document.children.push(struct_node(allocator, parser)!);
+				node.document.children.push(block_decl(allocator, parser)!);
 				continue;
 			case ALIAS:
 			case TYPEDEF:
@@ -145,6 +169,11 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 	return node;
 }
 
+fn void AstNode.assign_comment(&self, Allocator allocator, YadgParser *parser)
+{
+	self.comment = parser.find_comment().copy(allocator) ?? "";
+}
+
 // module ident[::ident] [attr(..) ..] ;
 fn AstNode*? module_node(Allocator allocator, YadgParser *parser)
 {
@@ -153,11 +182,7 @@ fn AstNode*? module_node(Allocator allocator, YadgParser *parser)
 
 	node.module_node.path.init(allocator);
 	node.module_node.attr.init(allocator);
-
-	if (try docstr = parser.find_adjacent_comment(allocator, parser.peek()))
-	{
-		node.comment = docstr;
-	}
+	node.assign_comment(allocator, parser);
 
 	if (!parser.expect(TokenType.MODULE)!) return INVALID_AST?;
 
@@ -183,11 +208,7 @@ fn AstNode*? global(Allocator allocator, YadgParser *parser)
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_GLOBAL;
 	node.terms.init(allocator);
-
-	if (try docstr = parser.find_adjacent_comment(allocator, parser.peek()))
-	{
-		node.comment = docstr;
-	}
+	node.assign_comment(allocator, parser);
 
 	while (parser.peek().type != TokenType.SEMICOLON)
 	{
@@ -200,32 +221,49 @@ fn AstNode*? global(Allocator allocator, YadgParser *parser)
 }
 
 // struct Name [attr(..) ..] [(..)] {..}
-fn AstNode*? struct_node(Allocator allocator, YadgParser *parser)
+// fn AstNode*? struct_node(Allocator allocator, YadgParser *parser)
+// {
+// 	AstNode* node = allocator::new(allocator, AstNode);
+// 	node.type = AST_STRUCT;
+//
+// 	node.struct_node.attr.init(allocator);
+// 	node.assign_comment(allocator, parser);
+//
+// 	if (!parser.expect(TokenType.STRUCT)!) return INVALID_AST?;
+//
+// 	if (parser.peek().type != TokenType.IDENT) return INVALID_AST?;
+// 	node.struct_node.name = parser.advance()!.lexeme().copy(allocator);
+//
+// 	while (parser.peek().type == TokenType.ATTRIBUTE)
+// 	{
+// 		node.struct_node.attr.push(attr(allocator, parser)!);
+// 	}
+//
+// 	if (parser.peek().type == TokenType.PAREN)
+// 	{
+// 		node.struct_node.paren = paren(allocator, parser)!;
+// 	}
+//
+// 	return node;
+// }
+
+// [ enum  | bitstruct ] Name : ["const"] ["inline"] $BackingType [attr(..) ..] [(..)] {..}
+fn AstNode*? block_decl(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_STRUCT;
+	node.type = AST_BLOCK_DECL;
 
-	node.struct_node.attr.init(allocator);
+	node.block.decls.init(allocator);
+	node.assign_comment(allocator, parser);
 
-	if (try docstr = parser.find_adjacent_comment(allocator, parser.peek()))
+	while (parser.peek().type != TokenType.BRACE)
 	{
-		node.comment = docstr;
+		if (parser.peek().type == EOF) return INVALID_AST?;
+		String lexeme = parser.advance()!.lexeme().copy(allocator);
+		node.block.decls.push(lexeme);
 	}
 
-	if (!parser.expect(TokenType.STRUCT)!) return INVALID_AST?;
-
-	if (parser.peek().type != TokenType.IDENT) return INVALID_AST?;
-	node.struct_node.name = parser.advance()!.lexeme().copy(allocator);
-
-	while (parser.peek().type == TokenType.ATTRIBUTE)
-	{
-		node.struct_node.attr.push(attr(allocator, parser)!);
-	}
-
-	if (parser.peek().type == TokenType.PAREN)
-	{
-		node.struct_node.paren = paren(allocator, parser)!;
-	}
+	node.block.block = block(allocator, parser)!;
 
 	return node;
 }
@@ -234,7 +272,7 @@ fn AstNode*? attr(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_ATTRIBUTE;
-	node.ident = parser.advance()!.lexeme().copy(allocator);
+	node.term = parser.advance()!.lexeme().copy(allocator);
 	return node;
 }
 
@@ -243,16 +281,52 @@ fn AstNode*? paren(Allocator allocator, YadgParser *parser)
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_PAREN;
 
-	if (parser.peek().type == TokenType.PAREN)
-	{
-		node.paren.content = parser.advance()!.lexeme().copy(allocator);
-	}
-	else
+	if (parser.peek().type != TokenType.PAREN)
 	{
 		return INVALID_AST?;
 	}
 
+	node.term = parser.advance()!.lexeme().copy(allocator);
+
 	return node;
+}
+
+fn AstNode*? block(Allocator allocator, YadgParser *parser)
+{
+	AstNode* node = allocator::new(allocator, AstNode);
+	node.type = AST_BLOCK;
+
+	if (parser.peek().type != TokenType.BRACE)
+	{
+		return INVALID_AST?;
+	}
+
+	node.term = format_braces(allocator, parser.advance()!.lexeme());
+
+	return node;
+}
+
+fn String format_braces(Allocator allocator, String str) => @pool()
+{
+	DString builder = dstring::temp("{\n");
+	foreach (i, ln : str.trim("{} \n\r\t").tsplit("\n"))
+	{
+		builder.appendf("    %s\n", ln.trim());
+	}
+	builder.append_chars("}");
+
+	return builder.copy_str(allocator);
+}
+
+fn String format_comment(Allocator allocator, String str) => @pool()
+{
+	DString builder = dstring::temp("");
+	foreach (i, ln : str.trim().tsplit("\n"))
+	{
+		builder.appendf("> %s\n", ln.trim());
+	}
+
+	return builder.copy_str(allocator);
 }
 
 /*

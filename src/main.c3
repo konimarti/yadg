@@ -18,6 +18,7 @@ fn int main(String[] args)
 
 	<*
 	 Struct description
+
 	 @deprecated
 	*>
 	struct Hello @local (Printable)
@@ -26,6 +27,14 @@ fn int main(String[] args)
 		String world;
 		int[2] numbers;
 	}
+
+	// This is an enum
+	enum TokenSomething : uint
+	{
+		FOO,
+		BAR,
+	}
+
 
 	<*
 	Contract for macro

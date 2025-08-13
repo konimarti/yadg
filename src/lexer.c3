@@ -172,7 +172,7 @@ fn LexerPosition Lexer.pos(&self) => { self.ln, self.col };
 fn Lexer* Lexer.init(&self, Allocator allocator, InStream input)
 {
 	*self = { .allocator = allocator, .f = input,
-		.ln = 1, .col = 1, .eof = false };
+		.ln = 0, .col = 1, .eof = false };
 	self.buf.init(allocator);
 	return self;
 }
@@ -195,19 +195,23 @@ fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '$' |
 
 fn char? Lexer.advance(&self)
 {
-	if (self.buf.len()) return self.buf.pop_first();
-
-	char c = self.f.read_byte()!;
-
-	self.col++;
-
-	if (is_lf(c))
+	char c;
+	if (self.buf.len())
 	{
-		self.ln++;
-		self.col = 1;
+		c = self.buf.pop_first()!;
+
+		self.col++;
+
+		if (is_lf(c))
+		{
+			self.ln++;
+			self.col = 1;
+		}
+
+		return c;
 	}
 
-	return c;
+	return self.f.read_byte()!;
 }
 
 fn char? Lexer.peek(&self)
