@@ -11,10 +11,10 @@ enum AstType
 	AST_DOCUMENT,
 	AST_MODULE,
 	AST_GLOBAL,
-	AST_BLOCK_DECL, // enum, bitstruct
-	AST_BLOCK,
+	AST_BLOCK, // enum, bitstruct
 	AST_CALL,
 	AST_ATTRIBUTE,
+	AST_BRACE,
 	AST_PAREN
 }
 
@@ -35,7 +35,7 @@ struct AstNode (Printable)
 		}
 		struct block {
 			StringList decls;
-			AstNode*   block;
+			AstNode*   brace;
 		}
 		struct call {
 			String     receiver;
@@ -85,7 +85,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
 
-		case AST_BLOCK_DECL:
+		case AST_BLOCK:
 			if (self.block.decls.len() < 2) return INVALID_AST?;
 			n += f.printf("### %s", self.block.decls[1])!;
 			n += f.printf("\n\n")!;
@@ -96,7 +96,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 				n += f.printf("%s%s", (i > 0 ? " " : ""), decl)!;
 			}
 			n += f.printf("\n")!;
-			n += f.printf("%s", self.block.block)!;
+			n += f.printf("%s", self.block.brace)!;
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
 
@@ -125,7 +125,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 		case AST_PAREN:
 			n += f.print(self.term)!;
 
-		case AST_BLOCK:
+		case AST_BRACE:
 			n += f.print(self.term)!;
 	}
 
@@ -155,7 +155,7 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 			case STRUCT:
 			case ENUM:
 			case BITSTRUCT:
-				node.document.children.push(block_decl(allocator, parser)!);
+				node.document.children.push(block(allocator, parser)!);
 				continue;
 			case ALIAS:
 			case TYPEDEF:
@@ -163,11 +163,9 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 				node.document.children.push(global(allocator, parser)!);
 				continue;
 			case FUNC:
+			case MACRO:
 				node.document.children.push(fncall(allocator, parser)!);
 				continue;
-			case MACRO:
-				// TODO
-				break;
 			case EOF:
 				break LOOP;
 			default:
@@ -231,10 +229,10 @@ fn AstNode*? global(Allocator allocator, YadgParser *parser)
 }
 
 // [ enum  | bitstruct ] Name : ["const"] ["inline"] $BackingType [attr(..) ..] [(..)] {..}
-fn AstNode*? block_decl(Allocator allocator, YadgParser *parser)
+fn AstNode*? block(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_BLOCK_DECL;
+	node.type = AST_BLOCK;
 
 	node.block.decls.init(allocator);
 	node.assign_comment(allocator, parser);
@@ -246,15 +244,18 @@ fn AstNode*? block_decl(Allocator allocator, YadgParser *parser)
 		node.block.decls.push(lexeme);
 	}
 
-	node.block.block = block(allocator, parser)!;
+	node.block.brace = brace(allocator, parser)!;
 
 	return node;
 }
 
+alias TokenList = List { Token };
+
 //  fn $ReturnType [Receiver.] Call "(" .. ")" [Attr..]  ( "{" .. "}" | ";" )
+//  macro [$ReturnType] [Receiver.] Call "(" .. ")" [Attr..]  ( "{" .. "}" | ";" )
 fn AstNode*? fncall(Allocator allocator, YadgParser *parser)
 {
-	String lexeme, receiver, name;
+	String lexeme;
 
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_CALL;
@@ -262,53 +263,38 @@ fn AstNode*? fncall(Allocator allocator, YadgParser *parser)
 	node.call.decls.init(allocator);
 	node.assign_comment(allocator, parser);
 
-	bool is_macro = parser.peek().type == TokeType.MACRO;
+	@pool()
+	{
+		TokenList tlist;
+		tlist.tinit();
 
-	if (parser.peek().type == TokenType.FUNC || is_macro)
-	{
-		lexeme = parser.advance()!.lexeme().copy(allocator);
-		node.call.decls.push(lexeme);
-	}
-	else
-	{
-		return INVALID_AST?;
-	}
+		Token tok = parser.peek();
+		while (tok.type != TokenType.PAREN)
+		{
+			if (tok.type == TokenType.EOF) return INVALID_AST?;
+			tlist.push(parser.advance()!);
+			tok = parser.peek();
+		}
 
-	// Return type
-	if (parser.peek().type != TokenType.IDENT)
-	{
-		return INVALID_AST?;
-	}
-	node.call.decls.push(parser.advance()!.lexeme().copy(allocator));
+		node.call.name = tlist.pop()!.lexeme().copy(allocator);
+		if (tlist.last()!.type == TokenType.DOT)
+		{
+			(void)tlist.pop(); // Pop DOT
+			node.call.receiver = tlist.pop()!.lexeme().copy(allocator);
+		}
 
-	// Receiver or call name
-	if (parser.peek().type != TokenType.IDENT)
-	{
-		io::printfn("Btoken got: %s", parser.peek() );
-		return INVALID_AST?;
-	}
-	name = parser.advance()!.lexeme().copy(allocator);
+		foreach (decl : tlist)
+		{
+			node.call.decls.push(decl.lexeme().copy(allocator));
+		}
 
-	if (parser.peek().type == TokenType.DOT)
-	{
-		receiver = name;
-		parser.advance()!; // Consume DOT
-		if (parser.peek().type != TokenType.IDENT) return INVALID_AST?;
-		name = parser.advance()!.lexeme().copy(allocator);
-	}
-
-	// Write to decls
-	node.call.name = name;
-	if (receiver.len)
-	{
-		node.call.receiver = receiver;
-		node.call.decls.push(string::format(allocator, "%s.%s", receiver, name));
-	}
-	else
-	{
-		node.call.decls.push(name);
-	}
-
+		String tmp = node.call.name;
+		if (node.call.receiver.len)
+		{
+			tmp = string::format(allocator, "%s.%s", node.call.receiver, node.call.name);
+		}
+		node.call.decls.push(tmp);
+	};
 
 	while (parser.peek().type != TokenType.BRACE && parser.peek().type != TokenType.SEMICOLON)
 	{
@@ -343,10 +329,10 @@ fn AstNode*? paren(Allocator allocator, YadgParser *parser)
 	return node;
 }
 
-fn AstNode*? block(Allocator allocator, YadgParser *parser)
+fn AstNode*? brace(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_BLOCK;
+	node.type = AST_BRACE;
 
 	if (parser.peek().type != TokenType.BRACE)
 	{
