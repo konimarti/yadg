@@ -54,6 +54,14 @@ fn int main(String[] args)
 		return a + b
 	}
 
+	<*
+	 this is a method for strcut Hello
+	*>
+	fn void? Hello.say_hello()
+	{
+		io::printfn("hello");
+	}
+
 	fn void main()
 	{
 		assert(macro_add(1,2) == fn_add(1,2));

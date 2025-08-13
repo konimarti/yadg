@@ -552,7 +552,7 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 	char c;
 	DString text = dstring::temp();
 	int i = 0;
-	while ((c = self.peek()!) && (is_ident(c) || (i > 0 && (c == '[' || c == ']'))))
+	while ((c = self.peek()!) && (is_ident(c) || (i > 0 && (c == '?' || c == '[' || c == ']'))))
 	{
 		text.append_char(self.advance()!);
 		i++;
