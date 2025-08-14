@@ -106,7 +106,11 @@ fn int main(String[] args)
 		@pool()
 		{
 			YadgParser *parser = (YadgParser){}.init(tmem, io::stdout());
-			io::printn(parser.parse(input)!!);
+			AstNode* document = parser.parse(input)!!;
+			// io::printn(document);
+			AstPrinter printer;
+			printer.init();
+			printer.visit(document)!!;
 		};
 	}
 
