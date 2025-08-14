@@ -7,7 +7,7 @@ fn int main(String[] args)
 {
 	String file = `
 	// This is the app module
-	module web::app;
+	module web::app @if(env::LINUX && env::DARWIN);
 
 	import std::io;
 
@@ -23,9 +23,10 @@ fn int main(String[] args)
 	*>
 	struct Hello @local (Printable)
 	{
-		inline int a;
-		String world;
-		int[2] numbers;
+		inline   int a;
+		String   world;
+		int[2]   numbers;
+		int[<4>] vec;
 	}
 
 	// This is an enum

@@ -546,11 +546,9 @@ fn Token? Lexer.lex_attribute(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
-	int i = 0;
-	while ((c = self.peek()!) && (is_ident(c) || c == '@' || (i > 0 && (c == '(' || c == ')'))))
+	while ((c = self.peek()!) && (is_ident(c) || c == '@' ))
 	{
 		text.append_char(self.advance()!);
-		i++;
 	}
 	String str = text.str_view().copy(self.allocator);
 	return self.emit_token(ATTRIBUTE, str);
@@ -576,9 +574,14 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 	char c;
 	DString text = dstring::temp();
 	int i = 0;
-	while ((c = self.peek()!) && (is_ident(c) || (i > 0 && (c == '?' || c == '[' || c == ']'))))
+	while ((c = self.peek()!) && (is_ident(c) || (i > 0 && (c == '?' || c == '[' || c == '<'))))
 	{
-		text.append_char(self.advance()!);
+		switch (c)
+		{
+			case '[': text.append_chars(self.scan_surround(0, "[", "]")!);
+			case '<': text.append_chars(self.scan_surround(0, "<", ">")!);
+			default:  text.append_char(self.advance()!);
+		}
 		i++;
 	}
 

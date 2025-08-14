@@ -59,6 +59,11 @@ struct AstNode (Printable)
 			StringList decls;
 			AstList    methods;  // typedef can have methods
 		}
+		struct attr
+		{
+			String     name;
+			AstNode*   paren;
+		}
 		String     term;
 	}
 	String comment;
@@ -194,7 +199,11 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			n += f.printf("```\n")!;
 
 		case AST_ATTRIBUTE:
-			n += f.print(self.term)!;
+			n += f.printf("%s", self.attr.name)!;
+			if (self.attr.paren)
+			{
+				n += f.printf("%s", self.attr.paren)!;
+			}
 
 		case AST_PAREN:
 			n += f.print(self.term)!;
@@ -352,7 +361,13 @@ fn AstNode*? attr(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_ATTRIBUTE;
-	node.term = parser.advance()!.lexeme().copy(allocator);
+
+	node.attr.name = parser.advance()!.lexeme().copy(allocator);
+	if (parser.peek().type == PAREN)
+	{
+		node.attr.paren = paren(allocator, parser)!;
+	}
+
 	return node;
 }
 
