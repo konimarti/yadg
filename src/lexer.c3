@@ -287,7 +287,7 @@ fn Token? Lexer._next(&self) @private => @pool()
 			return self.emit_token(type);
 		case ':':
 			self.advance()!; // Consuem ':'
-			TokenType type = COMMA;
+			TokenType type = COLON;
 			if (self.peek()! == ':')
 			{
 				self.advance()!; // Consume ':'
@@ -560,7 +560,7 @@ fn Token? Lexer.lex_number(&self) => @pool()
 	DString text = dstring::temp();
 	int i = 0;
 	while ((c = self.peek()!) && (is_digit(c) || c == '-' ||
-		(i > 0 && (c == '.' || c == 'e' || c == 'E'|| c == '_'))))
+		(i > 0 && (c == '.' || c == 'e' || c == 'E'|| c == 'b' || c == 'B' || c == 'x' || c == 'X' || c == '_'))))
 	{
 		text.append_char(self.advance()!);
 		i++;
