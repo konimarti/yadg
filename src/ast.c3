@@ -30,10 +30,22 @@ struct AstNode (Printable)
 		{
 			AstList modules;
 		}
-		struct module_node
+		struct mod
 		{
 			StringList path;
 			AstList    attr;
+			String     name; // last part of path
+			/*
+			TODO: Submodules: i.e. archive::zip, archive::reader
+
+				 archive
+				    |
+				+---+---+
+				|       |
+			      Reader   Zip
+
+			*/
+			AstList    submodules;
 
 			// Children
 			AstList    globals;
@@ -94,18 +106,18 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 			case BITSTRUCT:
 			case FAULTDEF:
 				AstNode *current_module = node.document.modules.last()!;
-				current_module.module_node.blocks.push(block(allocator, parser)!);
+				current_module.mod.blocks.push(block(allocator, parser)!);
 				continue;
 			case ALIAS:
 			case TYPEDEF:
 			case CONST:
 				AstNode *current_module = node.document.modules.last()!;
-				current_module.module_node.globals.push(global(allocator, parser)!);
+				current_module.mod.globals.push(global(allocator, parser)!);
 				continue;
 			case FUNC:
 			case MACRO:
 				AstNode *current_module = node.document.modules.last()!;
-				current_module.module_node.calls.push(fncall(allocator, parser)!);
+				current_module.mod.calls.push(fncall(allocator, parser)!);
 				continue;
 			case EOF:
 				break LOOP;
@@ -114,6 +126,8 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 		}
 		parser.advance()!;
 	}
+
+	// TODO: sort modules, calls, globs, etc.
 
 	// Match receivers with receiver methods per module
 	foreach (mod : node.document.modules)
@@ -136,20 +150,20 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 
 		case AST_MODULE:
 			n += f.printf("## ")!;
-			foreach (i, path : self.module_node.path)
+			foreach (i, path : self.mod.path)
 			{
 				n += f.printf("%s%s", (i > 0 ? "::" : ""), path)!;
 			}
-			foreach (attr : self.module_node.attr)
+			foreach (attr : self.mod.attr)
 			{
 				n += f.printf(" %s", attr)!;
 			}
 			n += f.printf("\n\n")!;
 			if (self.comment.len) n += f.printf("%s\n", self.comment)!;
 
-			foreach (global : self.module_node.globals) io::printf("%s\n", global);
-			foreach (call : self.module_node.calls) io::printf("%s\n", call);
-			foreach (block : self.module_node.blocks) io::printf("%s\n", block);
+			foreach (global : self.mod.globals) io::printf("%s\n", global);
+			foreach (call : self.mod.calls) io::printf("%s\n", call);
+			foreach (block : self.mod.blocks) io::printf("%s\n", block);
 
 		case AST_GLOBAL:
 			n += f.printf("### %s", self.glob.name)!;
@@ -162,7 +176,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			}
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
-			foreach (method : self.glob.methods) io::printfn("%s\n", method);
+			foreach (method : self.glob.methods) io::printfn("\n%s", method);
 
 		case AST_BLOCK:
 			n += f.printf("### %s", self.block.name)!;
@@ -177,7 +191,7 @@ fn usz? AstNode.to_format(&self, Formatter* f) @dynamic
 			n += f.printf("%s", self.block.brace)!;
 			n += f.printf("\n")!;
 			n += f.printf("```\n")!;
-			foreach (method : self.block.methods) io::printfn("%s\n", method);
+			foreach (method : self.block.methods) io::printfn("\n%s", method);
 
 		case AST_CALL:
 			if (self.call.receiver.len)
@@ -223,15 +237,18 @@ fn void AstNode.assign_comment(&self, Allocator allocator, YadgParser *parser)
 // module ident[::ident] [attr(..) ..] ;
 fn AstNode*? module_node(Allocator allocator, YadgParser *parser)
 {
+	String lexeme;
+
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_MODULE;
 
-	node.module_node.path.init(allocator);
-	node.module_node.attr.init(allocator);
+	node.mod.path.init(allocator);
+	node.mod.attr.init(allocator);
+	node.mod.submodules.init(allocator);
 
-	node.module_node.globals.init(allocator);
-	node.module_node.calls.init(allocator);
-	node.module_node.blocks.init(allocator);
+	node.mod.globals.init(allocator);
+	node.mod.calls.init(allocator);
+	node.mod.blocks.init(allocator);
 
 	node.assign_comment(allocator, parser);
 
@@ -239,13 +256,15 @@ fn AstNode*? module_node(Allocator allocator, YadgParser *parser)
 
 	while (parser.peek().type == TokenType.IDENT)
 	{
-		node.module_node.path.push(parser.advance()!.lexeme().copy(allocator));
+		lexeme = parser.advance()!.lexeme().copy(allocator);
+		node.mod.path.push(lexeme);
+		node.mod.name = lexeme; // Eventually the last element will stick
 		if (!parser.expect(TokenType.SCOPE)!) break;
 	}
 
 	while (parser.peek().type == TokenType.ATTRIBUTE)
 	{
-		node.module_node.attr.push(attr(allocator, parser)!);
+		node.mod.attr.push(attr(allocator, parser)!);
 	}
 
 	if (!parser.expect(TokenType.SEMICOLON)!) return INVALID_AST?;
@@ -430,36 +449,32 @@ fn void? match_receivers(AstNode *mod) => @pool()
 	AstList calls;
 	calls.tinit();
 	// Loop over calls and determine if it is a method
-	foreach (call_node : mod.module_node.calls)
+	foreach (call_node : mod.mod.calls)
 	{
 		receiver = call_node.call.receiver;
 		if (!receiver.len)
 		{
 			// No receiver
-			io::printn("NO RECEIVER");
 			calls.push(call_node);
 			continue;
 		}
-		io::printfn("Call: %s.%s", receiver, call_node.call.name);
 
 		// Yes. we have a receiver.
 		bool found = false;
-		foreach (block_node : mod.module_node.blocks)
+		foreach (block_node : mod.mod.blocks)
 		{
 			if (block_node.block.name == receiver)
 			{
-				io::printfn("Receiver found in block: %s", block_node.block.name);
 				block_node.block.methods.push(call_node);
 				found = true;
 				break;
 			}
 		}
 		if (found) break;
-		foreach (global_node : mod.module_node.globals)
+		foreach (global_node : mod.mod.globals)
 		{
 			if (global_node.glob.name == receiver)
 			{
-				io::printfn("Receiver found in glob: %s", global_node.glob.name);
 				global_node.glob.methods.push(call_node);
 				found = true;
 				break;
@@ -469,6 +484,6 @@ fn void? match_receivers(AstNode *mod) => @pool()
 	}
 
 	// Restore calls that have no receiver
-	mod.module_node.calls.clear();
-	mod.module_node.calls.add_all(&calls);
+	mod.mod.calls.clear();
+	mod.mod.calls.add_all(&calls);
 }
