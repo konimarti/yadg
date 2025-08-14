@@ -60,32 +60,29 @@ enum TokenType : ushort (String symbol)
 
 	// Comments and Contracts
 	CONTRACT  = "",  // <* *>
-	LCOMMENT  = "",    // Line comment //
-	BCOMMENT  = "",    // Block comment /* */
+	LCOMMENT  = "",  // Line comment //
+	BCOMMENT  = "",  // Block comment /* */
 
 	// Identifiers and Strings
-	IDENT     = "",	   // Identifiers (`module`, `fn`, `macro`, etc. )
-	STRING    = "",    // "..", '..', `..`
+	IDENT     = "",	 // Identifiers (`MAX_GLOBAL`, `add`, ..)
+	STRING    = "",  // "..", '..', `..`
+	NUMBER    = "",  // 123, 1.0e-16, ..
 
 	// Keywords
-	ATTRIBUTE = "", // @
-	FUNC      = "", // fn
-	MACRO     = "", // macro
-	MODULE    = "", // module
-	IMPORT    = "", // import
-	CONST     = "", // const
-	ALIAS     = "", // alias
-	TYPEDEF   = "", // typedef
-	ENUM      = "", // enum
-	STRUCT    = "", // struct
-	BITSTRUCT = "", // bitstruct
-	FAULTDEF  = "", // faultdef
-	IF        = "", // if
-	ELSE      = "", // else
-	WHILE     = "", // while
-	FOR       = "", // for
-	FOREACH   = "", // foreach
-	FOREACHR  = "", // foreachr
+	ATTRIBUTE = "",  // @
+	FUNC      = "",  // fn
+	MACRO     = "",  // macro
+	MODULE    = "",  // module
+	IMPORT    = "",  // import
+	CONST     = "",  // const
+	ALIAS     = "",  // alias
+	TYPEDEF   = "",  // typedef
+	ENUM      = "",  // enum
+	STRUCT    = "",  // struct
+	BITSTRUCT = "",  // bitstruct
+	FAULTDEF  = "",  // faultdef
+
+	KEYWORD   = "",  // "if", "else", types like ("int", "char[]", "uint[<*>]")
 
 	EOF       = "EOF",
 }
@@ -191,6 +188,7 @@ fn void Lexer.report_error(&self, String msg)
 
 fn bool is_lf(char c) @inline => c == '\n';
 fn bool is_ws(char c) @inline => @ok(" \t\r\n".index_of_char(c));
+fn bool is_digit(char c) @inline => ascii::is_digit(c);
 fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '$' || c == '#';
 
 fn char? Lexer.advance(&self)
@@ -221,6 +219,8 @@ fn char? Lexer.peek(&self)
 	self.buf.push(c);
 	return c;
 }
+
+fn void Lexer.pushback(&self, char c) => self.buf.push_front(c);
 
 <*
  Emit token from lexer.
@@ -272,11 +272,19 @@ fn Token? Lexer._next(&self) @private => @pool()
 		case ',': self.advance()!; return self.emit_token(COMMA);
 		case '.': self.advance()!; return self.emit_token(DOT);
 		case '+': self.advance()!; return self.emit_token(PLUS);
-		case '-': self.advance()!; return self.emit_token(MINUS);
 		case '*': self.advance()!; return self.emit_token(STAR);
 		case '%': self.advance()!; return self.emit_token(MODULUS);
 		case '~': self.advance()!; return self.emit_token(TILDE);
 		case '^': self.advance()!; return self.emit_token(XOR);
+		case '-':
+			self.advance()!; // Consuem '-'
+			TokenType type = MINUS;
+			if (is_digit(self.peek()!))
+			{
+				self.pushback(c);
+				return self.lex_number()!;
+			}
+			return self.emit_token(type);
 		case ':':
 			self.advance()!; // Consuem ':'
 			TokenType type = COMMA;
@@ -361,6 +369,7 @@ fn Token? Lexer._next(&self) @private => @pool()
 		case '`':
 			return self.lex_string()!;
 		default:
+			if (is_digit(c)) return self.lex_number()!;
 			if (is_ident(c)) return self.lex_ident()!;
 			self.report_error(string::tformat("encountered invalid char: '%c'", c));
 			return INVALID_CHAR?;
@@ -547,6 +556,21 @@ fn Token? Lexer.lex_attribute(&self) => @pool()
 	return self.emit_token(ATTRIBUTE, str);
 }
 
+fn Token? Lexer.lex_number(&self) => @pool()
+{
+	char c;
+	DString text = dstring::temp();
+	int i = 0;
+	while ((c = self.peek()!) && (is_digit(c) || c == '-' ||
+		(i > 0 && (c == '.' || c == 'e' || c == 'E'|| c == '_'))))
+	{
+		text.append_char(self.advance()!);
+		i++;
+	}
+	String str = text.str_view().copy(self.allocator);
+	return self.emit_token(NUMBER, str);
+}
+
 fn Token? Lexer.lex_ident(&self) => @pool()
 {
 	char c;
@@ -561,7 +585,7 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 	String str = text.str_view().copy(self.allocator);
 	switch (str)
 	{
-		// Keywords
+		// Explicit Keywords
 		case "fn":        return self.emit_token(FUNC, str);
 		case "macro":     return self.emit_token(MACRO, str);
 		case "module":    return self.emit_token(MODULE, str);
@@ -573,12 +597,16 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "struct":    return self.emit_token(STRUCT, str);
 		case "bitstruct": return self.emit_token(BITSTRUCT, str);
 		case "faultdef":  return self.emit_token(FAULTDEF, str);
-		case "if":        return self.emit_token(IF, str);
-		case "else":      return self.emit_token(ELSE, str);
-		case "while":     return self.emit_token(WHILE, str);
-		case "for":       return self.emit_token(FOR, str);
-		case "foreach":   return self.emit_token(FOREACH, str);
-		case "foreach_r": return self.emit_token(FOREACHR, str);
+		// Explicit Keywords
+		case "if":        return self.emit_token(KEYWORD, str);
+		case "else":      return self.emit_token(KEYWORD, str);
+		case "while":     return self.emit_token(KEYWORD, str);
+		case "do":        return self.emit_token(KEYWORD, str);
+		case "for":       return self.emit_token(KEYWORD, str);
+		case "foreach":   return self.emit_token(KEYWORD, str);
+		case "foreach_r": return self.emit_token(KEYWORD, str);
+		case "tlocal":    return self.emit_token(KEYWORD, str);
+		case "extern":    return self.emit_token(KEYWORD, str);
 		default:          return self.emit_token(IDENT, str);
 	}
 }

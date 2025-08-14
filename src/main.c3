@@ -11,10 +11,10 @@ fn int main(String[] args)
 
 	import std::io;
 
-	// Max is a maximum number
-	const MAX = 10;
-	alias NewType @local = int;
+	// Define max precision
+	const PRECISION = 1.00e-16;
 
+	alias NewType @local = int;
 
 	<*
 	 Struct description

@@ -87,6 +87,7 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 			case STRUCT:
 			case ENUM:
 			case BITSTRUCT:
+			case FAULTDEF:
 				AstNode *current_module = node.document.modules.last()!;
 				current_module.module_node.blocks.push(block(allocator, parser)!);
 				continue;
