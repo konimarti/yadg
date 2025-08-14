@@ -56,12 +56,17 @@ fn int main(String[] args)
 	}
 
 	<*
-	 this is a method for strcut Hello
+	 this is a method for struct Hello
 	*>
-	fn void? Hello.say_hello()
+	fn void? Hello.say_hello(&self)
 	{
 		io::printfn("hello");
 	}
+
+	<*
+	 'to_char_start' is a method of struct Hello
+	*>
+	fn char* Hello.to_char_start(&self, char* str) => str;
 
 	fn void main()
 	{

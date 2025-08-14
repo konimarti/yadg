@@ -118,6 +118,7 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 			case MACRO:
 				AstNode *current_module = node.document.modules.last()!;
 				current_module.mod.calls.push(fncall(allocator, parser)!);
+				// io::printfn("-- added fn to 'calls': %s (receiver: %s) --", current_module.mod.calls.last()!.call.name, current_module.mod.calls.last()!.call.receiver);
 				continue;
 			case EOF:
 				break LOOP;
@@ -366,11 +367,13 @@ fn AstNode*? fncall(Allocator allocator, YadgParser *parser)
 		node.call.decls.push(tmp);
 	};
 
-	while (parser.peek().type != TokenType.BRACE && parser.peek().type != TokenType.SEMICOLON)
+	Token tok = parser.peek();
+	while (tok.type != TokenType.BRACE && tok.type != TokenType.SEMICOLON && tok.type != TokenType.ARROW)
 	{
-		if (parser.peek().type == EOF) return INVALID_AST?;
+		if (tok.type == EOF) return INVALID_AST?;
 		lexeme = parser.advance()!.lexeme().copy(allocator);
 		node.call.decls.push(lexeme);
+		tok = parser.peek();
 	}
 
 	return node;
@@ -452,6 +455,7 @@ fn void? match_receivers(AstNode *mod) => @pool()
 	foreach (call_node : mod.mod.calls)
 	{
 		receiver = call_node.call.receiver;
+		// io::printfn("match_receivers for call '%s' (receiver: %s)", call_node.call.name, receiver);
 		if (!receiver.len)
 		{
 			// No receiver
@@ -465,12 +469,12 @@ fn void? match_receivers(AstNode *mod) => @pool()
 		{
 			if (block_node.block.name == receiver)
 			{
+				// io::printfn("RECEIVER FOUND: '%s' for '%s'", receiver, call_node.call.name);
 				block_node.block.methods.push(call_node);
 				found = true;
 				break;
 			}
 		}
-		if (found) break;
 		foreach (global_node : mod.mod.globals)
 		{
 			if (global_node.glob.name == receiver)
