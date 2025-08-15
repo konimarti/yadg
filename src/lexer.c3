@@ -70,19 +70,19 @@ enum TokenType : ushort (String symbol)
 
 	// Keywords
 	ATTRIBUTE = "",  // @
+	ALIAS     = "",  // alias
+	BITSTRUCT = "",  // bitstruct
+	CONST     = "",  // const
+	ENUM      = "",  // enum
+	FAULTDEF  = "",  // faultdef
 	FUNC      = "",  // fn
+	IMPORT    = "",  // import
 	MACRO     = "",  // macro
 	MODULE    = "",  // module
-	IMPORT    = "",  // import
-	CONST     = "",  // const
-	ALIAS     = "",  // alias
 	TYPEDEF   = "",  // typedef
-	ENUM      = "",  // enum
 	STRUCT    = "",  // struct
-	BITSTRUCT = "",  // bitstruct
-	FAULTDEF  = "",  // faultdef
 
-	KEYWORD   = "",  // "if", "else", types like ("int", "char[]", "uint[<*>]")
+	KEYWORD   = "",  // "if", "else", types like ("int", "char", "uint")
 
 	EOF       = "EOF",
 }
@@ -169,7 +169,7 @@ fn LexerPosition Lexer.pos(&self) => { self.ln, self.col };
 fn Lexer* Lexer.init(&self, Allocator allocator, InStream input)
 {
 	*self = { .allocator = allocator, .f = input,
-		.ln = 0, .col = 1, .eof = false };
+		.ln = 1, .col = 1, .eof = false };
 	self.buf.init(allocator);
 	return self;
 }
@@ -573,16 +573,17 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
-	int i = 0;
-	while ((c = self.peek()!) && (is_ident(c) || (i > 0 && (c == '?' || c == '[' || c == '<'))))
+	// int i = 0;
+	while ((c = self.peek()!) && (is_ident(c)))
 	{
-		switch (c)
-		{
-			case '[': text.append_chars(self.scan_surround(0, "[", "]")!);
-			case '<': text.append_chars(self.scan_surround(0, "<", ">")!);
-			default:  text.append_char(self.advance()!);
-		}
-		i++;
+		// switch (c)
+		// {
+			// case '[': text.append_chars(self.scan_surround(0, "[", "]")!);
+			// case '<': text.append_chars(self.scan_surround(0, "<", ">")!);
+			// default:  text.append_char(self.advance()!);
+		// }
+		// i++;
+		text.append_char(self.advance()!);
 	}
 
 	String str = text.str_view().copy(self.allocator);
@@ -610,6 +611,24 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "foreach_r": return self.emit_token(KEYWORD, str);
 		case "tlocal":    return self.emit_token(KEYWORD, str);
 		case "extern":    return self.emit_token(KEYWORD, str);
+		case "inline":    return self.emit_token(KEYWORD, str);
+		// Types
+		case "bool":      return self.emit_token(KEYWORD, str);
+		case "ichar":     return self.emit_token(KEYWORD, str);
+		case "char":      return self.emit_token(KEYWORD, str);
+		case "short":     return self.emit_token(KEYWORD, str);
+		case "ushort":    return self.emit_token(KEYWORD, str);
+		case "int":       return self.emit_token(KEYWORD, str);
+		case "uint":      return self.emit_token(KEYWORD, str);
+		case "long":      return self.emit_token(KEYWORD, str);
+		case "ulong":     return self.emit_token(KEYWORD, str);
+		case "int128":    return self.emit_token(KEYWORD, str);
+		case "uint128":   return self.emit_token(KEYWORD, str);
+		case "iptr":      return self.emit_token(KEYWORD, str);
+		case "uptr":      return self.emit_token(KEYWORD, str);
+		case "isz":       return self.emit_token(KEYWORD, str);
+		case "usz":       return self.emit_token(KEYWORD, str);
+
 		default:          return self.emit_token(IDENT, str);
 	}
 }

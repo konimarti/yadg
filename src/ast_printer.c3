@@ -15,15 +15,16 @@ struct AstPrinter
 	usz depth;
 }
 
-fn AstPrinter* AstPrinter.init(&self)
+fn AstPrinter* AstPrinter.init(&self, OutStream out = io::stdout())
 {
-	self.out = io::stdout();
+	self.out = out;
 	self.f.init(&output_stream_fn, &self.out);
 	return self;
 }
 
 fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 {
+	if (node == null) return 0;
 
 	self.depth++;
 	defer { self.depth--; };
@@ -32,74 +33,92 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	Formatter *f = &self.f;
 
 	DString tmp = dstring::temp();
-	tmp.append_repeat('\t', self.depth);
-
+	tmp.append_repeat('\t', self.depth-1);
 	String prefix = tmp.str_view();
+
+	n += f.print(prefix)!;
+	n += f.printf("(%s\n", node.type)!;
 
 	switch (node.type)
 	{
 		case AST_DOCUMENT:
-			foreach (child : node.document.modules)
+			foreach (stmt : node.document.stmts)
 			{
-				n += f.print(prefix)!;
-				n += f.printf("(document\n")!;
-
-				n += self.visit(child)!;
-
-				n += f.print(prefix)!;
-				n += f.printf(")\n")!;
+				n += self.visit(stmt)!;
 			}
+
+		case AST_STMT:
+			n += self.visit(node.stmt.comment)!;
+			n += self.visit(node.stmt.node)!;
 
 		case AST_MODULE:
-			n += f.print(prefix)!;
-			n += f.printf("(module %s\n", node.mod.path.last()!)!;
+			n += self.visit(node.module_stmt.scope)!;
+			foreach (attr : node.module_stmt.attrs) n += self.visit(attr)!;
 
-			foreach (global : node.mod.globals)
-			{
-				n += self.visit(global)!;
-			}
-
-			foreach (call : node.mod.calls)
-			{
-				n += self.visit(call)!;
-			}
-
-			foreach (block : node.mod.blocks)
-			{
-				n += self.visit(block)!;
-			}
-
-			n += f.print(prefix)!;
-			n += f.printf(")\n")!;
-
-		case AST_GLOBAL:
-			n += f.print(prefix)!;
-			n += f.printf("(global %s)\n", node.glob.name)!;
-
-			// foreach (method : node.glob.methods) io::printfn("\n%s", method);
-
-		case AST_BLOCK:
-			n += f.print(prefix)!;
-			n += f.printf("(block %s", node.block.name)!;
-			if (node.block.methods.len())
-			{
-				n += f.printf("\n")!;
-				foreach (method : node.block.methods) n += self.visit(method)!;
-				n += f.print(prefix)!;
-			}
-			n += f.printf(")\n")!;
-
+		case AST_ALIAS:
+			n += self.visit(node.alias_node.lvalue)!;
+			foreach (attr : node.alias_node.attrs) n += self.visit(attr)!;
+			n += self.visit(node.alias_node.rvalue)!;
 
 		case AST_CALL:
-			n += f.print(prefix)!;
-			n += f.printf("(call ", node.call.name)!;
-			if (node.call.receiver.len) n += f.printf("%s.", node.call.receiver)!;
-			n += f.printf("%s)\n", node.call.name)!;
+			n += self.visit(node.call.type)!;
+			n += self.visit(node.call.callee)!;
+			n += self.visit(node.call.paren)!;
 
-		case AST_ATTRIBUTE:
+		case AST_CALLEE:
+			n += f.print(prefix)!;
+			if (node.callee.receiver.len)
+			{
+				n += f.printf("%s.", node.callee.receiver)!;
+			}
+			n += f.printf("%s\n", node.callee.call_name)!;
+
+		// case AST_BLOCK:
+		// 	n += f.print(prefix)!;
+		// 	n += f.printf("(block %s", node.block.name)!;
+		// 	if (node.block.methods.len())
+		// 	{
+		// 		n += f.printf("\n")!;
+		// 		foreach (method : node.block.methods) n += self.visit(method)!;
+		// 		n += f.print(prefix)!;
+		// 	}
+		// 	n += f.printf(")\n")!;
+
+		case AST_TYPE:
 		case AST_PAREN:
 		case AST_BRACE:
+			n += f.print(prefix)!;
+			n += f.printf("%s\n", node.str)!;
+
+		case AST_ATTR:
+			n += f.print(prefix)!;
+			n += f.printf("%s\n", node.attr.name)!;
+			if (node.attr.paren) n += self.visit(node.attr.paren)!;
+
+		case AST_COMMENT:
+			if (node.comment.str.len)
+			{
+				n += f.print(prefix)!;
+				n += f.printf("Ln: %d -- %s\n", node.comment.endln, node.comment.str)!;
+			}
+			else
+			{
+				n += f.print(prefix)!;
+				n += f.printf("<none>\n")!;
+			}
+
+		case AST_SCOPE:
+			n += f.print(prefix)!;
+			n += f.printf("%s\n", node.scope.scope_name)!;
+			if (node.scope.next) n += self.visit(node.scope.next)!;
+
+		default:
+			n += f.print("<not implemented yet in printer>\n")!;
 	}
+
+	// Closing the paren
+	n += f.print(prefix)!;
+	n += f.printf(")\n")!;
 
 	return n;
 }

@@ -4,24 +4,11 @@ import yadg::lexer;
 import std::collections::list;
 import std::io;
 
-struct Comment
-{
-	usz       end_ln; // Comment ends at lineno
-	String    comment;
-	Allocator allocator;
-}
-
-fn void Comment.free(&self)
-{
-	if (!self.allocator) return;
-	self.comment.free(self.allocator);
-}
-
 struct YadgParser
 {
 	Lexer        lexer;
 	Token        next_token;
-	Comment      last_comment;
+	Token        last_comment;
 	OutStream    output;
 	String       path_prefix;
 	Allocator    allocator;
@@ -49,12 +36,13 @@ fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
 	// Lexer is with temporary allocator; no need to free tokens
 	self.lexer = *(Lexer){}.init(tmem, file);
 	defer self.lexer.free();
+
+	// Set next_token
 	self.next_token = self.lexer.next()!;
 
 	AstNode *doc = document(self.allocator, self)!;
 
 	// Release unused resources
-	self.last_comment.free();
 	self.last_comment = {};
 	self.next_token = {};
 	self.lexer = {};
@@ -62,13 +50,19 @@ fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
 	return doc;
 }
 
-fn String? YadgParser.find_comment(&self)
+fn Token? YadgParser.find_comment(&self)
 {
-	if (self.peek().range.start.ln - self.last_comment.end_ln < 2)
+	if (self.peek().range.start.ln - self.last_comment.range.end.ln < 2)
 	{
-		return self.last_comment.comment;
+		return self.last_comment;
 	}
 	return NOT_FOUND?;
+}
+
+fn void YadgParser.report_error(&self, String err_msg)
+{
+	io::eprintfn("PARSER ERROR at Ln: %d, Col: %d -- %s [next token: %s]",
+		self.lexer.ln, self.lexer.col, err_msg, self.next_token);
 }
 
 // Return next token that will be consumed next.
