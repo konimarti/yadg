@@ -60,6 +60,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			foreach (attr : node.alias_node.attrs) n += self.visit(attr)!;
 			n += self.visit(node.alias_node.rvalue)!;
 
+		case AST_MACRO:
 		case AST_CALL:
 			n += self.visit(node.call.type)!;
 			n += self.visit(node.call.callee)!;

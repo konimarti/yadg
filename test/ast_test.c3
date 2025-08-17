@@ -43,3 +43,21 @@ fn void test_faultdef() @test
 	run_parser(input)!!;
 	assert(false);
 }
+
+fn void test_macro() @test
+{
+	String input = `
+	module foo::bar::macro_test;
+
+	<* macro without return type *>
+	macro fn_add(#a, #b)
+	{
+		return $$stringify(#a, #b);
+	}
+
+	<* macro with return type *>
+	macro int fn_add_2(#a, #b) => $$stringify(#a, #b);
+	`;
+	run_parser(input)!!;
+	assert(false);
+}

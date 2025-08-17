@@ -251,7 +251,7 @@ fn AstNode*? stmt(Allocator allocator, YadgParser *parser)
 		// case CONST:
 		// case ENUM:
 		case FAULTDEF: node.stmt.node = faultdef_stmt(allocator, parser)!;
-		// case MACRO:    node.stmt.node = macro_stmt(allocator, parser)!;
+		case MACRO:    node.stmt.node = call(allocator, parser, true)!;
 		case MODULE:   node.stmt.node = module_stmt(allocator, parser)!;
 		// case STRUCT:
 		default:
@@ -297,7 +297,7 @@ fn AstNode*? module_stmt(Allocator allocator, YadgParser *parser)
 
 	if (!parser.expect(MODULE)!)
 	{
-		parser.report_error("exepected a 'module' token");
+		parser.report_error("expected a 'module' token");
 		return INVALID_AST?;
 	}
 
@@ -324,7 +324,7 @@ fn AstNode*? scope(Allocator allocator, YadgParser *parser)
 
 	if (parser.peek().type != IDENT)
 	{
-		parser.report_error("scope: exepect IDENT");
+		parser.report_error("scope: expect IDENT");
 		return INVALID_AST?;
 	}
 	node.scope.scope_name = parser.advance()!.lexeme().copy(allocator);
@@ -383,13 +383,13 @@ fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser)
 
 	if (!parser.expect(ALIAS)!)
 	{
-		parser.report_error("exepected an 'alias' token");
+		parser.report_error("expected an 'alias' token");
 		return INVALID_AST?;
 	}
 
 	if (parser.peek().type != IDENT)
 	{
-		parser.report_error("exepected an 'IDENT' token");
+		parser.report_error("expected an 'IDENT' token");
 	}
 
 	node.alias_node.lvalue = type(allocator, parser)!;
@@ -432,7 +432,7 @@ fn AstNode*? faultdef_stmt(Allocator allocator, YadgParser *parser)
 
 	if (!parser.expect(FAULTDEF)!)
 	{
-		parser.report_error("exepected an 'FAULTDEF' token");
+		parser.report_error("expected an 'FAULTDEF' token");
 		return INVALID_AST?;
 	}
 
@@ -517,21 +517,28 @@ fn AstNode*? type(Allocator allocator, YadgParser *parser) => @pool()
 	return node;
 }
 
-fn AstNode*? call(Allocator allocator, YadgParser *parser)
+fn AstNode*? call(Allocator allocator, YadgParser *parser, bool is_macro = false)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_CALL;
+	node.type = is_macro ? AST_MACRO : AST_CALL;
 	node.call.attrs.init(allocator);
 
-	if (!parser.expect(FUNC)!)
+	if (!parser.expect(FUNC)! && !parser.expect(MACRO)!)
 	{
-		parser.report_error("expected a 'FUNC' token");
+		parser.report_error("expected a 'FUNC' or 'MACRO' token");
 		return INVALID_AST?;
 	}
 
 	node.call.type   = type(allocator, parser)!;
 	node.call.callee = callee(allocator, parser)!;
 	node.call.paren  = paren(allocator, parser)!;
+
+	if (is_macro && node.call.callee.callee.call_name.len == 0 && node.call.type.str.len > 0)
+	{
+		node.call.callee.callee.call_name = node.call.type.str;
+		// TODO: Release type node.
+		node.call.type   = null;
+	}
 
 	while (parser.peek().type == ATTRIBUTE)
 	{
