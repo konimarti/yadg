@@ -14,7 +14,7 @@ enum AstType
 	AST_ALIAS,
 	AST_CONST,
 	AST_ENUM,
-	AST_FAULDEF,
+	AST_FAULTDEF,
 	AST_CALL,
 	AST_MACRO,
 	AST_MODULE,
@@ -86,6 +86,7 @@ struct AstNode (Printable)
 			AstNode* type;
 			AstNode* callee;
 			AstNode* paren;
+			AstList  attrs;
 		}
 		struct callee
 		{
@@ -225,9 +226,12 @@ fn AstNode*? document(Allocator allocator, YadgParser *parser)
 	node.type = AST_DOCUMENT;
 	node.document.stmts.init(allocator);
 
+	AstNode* stmt_node;
 	while (!parser.expect(EOF)!)
 	{
-		node.document.stmts.push(stmt(allocator, parser)!);
+		stmt_node = stmt(allocator, parser)!;
+		if (stmt_node.stmt.node == null && stmt_node.stmt.comment == null) continue; // TODO: free stmt node when discarded
+		node.document.stmts.push(stmt_node);
 	}
 
 	return node;
@@ -240,23 +244,17 @@ fn AstNode*? stmt(Allocator allocator, YadgParser *parser)
 
 	node.stmt.comment = comment(allocator, parser)!;
 
-	Token tok;
-	while LOOP: (tok.type != EOF)
+	switch(parser.peek().type)
 	{
-		tok = parser.peek();
-		switch(tok.type)
-		{
-			case ALIAS: return alias_stmt(allocator, parser)!;
-			case FUNC:  return call(allocator, parser)!;
-			// case CONST:
-			// case ENUM:
-			// case FAULTDEF:
-			// case MACRO:
-			case MODULE: return module_stmt(allocator, parser)!;
-			// case STRUCT:
-			default:
-		}
-		parser.advance()!;
+		case ALIAS:    node.stmt.node = alias_stmt(allocator, parser)!;
+		case FUNC:     node.stmt.node = call(allocator, parser)!;
+		// case CONST:
+		// case ENUM:
+		case FAULTDEF: node.stmt.node = faultdef_stmt(allocator, parser)!;
+		// case MACRO:    node.stmt.node = macro_stmt(allocator, parser)!;
+		case MODULE:   node.stmt.node = module_stmt(allocator, parser)!;
+		// case STRUCT:
+		default:
 	}
 
 	return node;
@@ -264,18 +262,16 @@ fn AstNode*? stmt(Allocator allocator, YadgParser *parser)
 
 fn AstNode*? comment(Allocator allocator, YadgParser *parser)
 {
-	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_COMMENT;
-
 	Token comment, tok;
 	while LOOP: (true)
 	{
 		tok = parser.peek();
 		switch(tok.type)
 		{
+			case LCOMMENT:
+			case BCOMMENT:
+				break; // switch
 			case CONTRACT:
-			// case LCOMMENT:
-			// case BCOMMENT:
 				comment = tok;
 			default:
 				break LOOP;
@@ -283,9 +279,13 @@ fn AstNode*? comment(Allocator allocator, YadgParser *parser)
 		parser.advance()!;
 	}
 
+	if (comment.type != CONTRACT) return null;
+	if (parser.peek().range.start.ln - comment.range.end.ln > 1) return null;
+
+	AstNode* node = allocator::new(allocator, AstNode);
+	node.type = AST_COMMENT;
 	node.comment.str = comment.lexeme().trim().replace(allocator, "\n", " ");
 	node.comment.endln = comment.range.end.ln;
-
 	return node;
 }
 
@@ -298,6 +298,7 @@ fn AstNode*? module_stmt(Allocator allocator, YadgParser *parser)
 	if (!parser.expect(MODULE)!)
 	{
 		parser.report_error("exepected a 'module' token");
+		return INVALID_AST?;
 	}
 
 	node.module_stmt.scope = scope(allocator, parser)!;
@@ -383,6 +384,7 @@ fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser)
 	if (!parser.expect(ALIAS)!)
 	{
 		parser.report_error("exepected an 'alias' token");
+		return INVALID_AST?;
 	}
 
 	if (parser.peek().type != IDENT)
@@ -403,15 +405,51 @@ fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser)
 		return INVALID_AST?;
 	}
 
-	// Rvalue could also be a fn call!!!
+	// Rvalue could  be a type, module or function call.
 	// e.g. alias OnceFn = fn void();
-	if (parser.peek().type == FUNC)
+	// e.g. alias l = module std::collection::list;
+	switch (parser.peek().type)
 	{
-		node.alias_node.rvalue = call(allocator, parser)!;
+		case FUNC:   node.alias_node.rvalue = call(allocator, parser)!;
+		case MODULE: node.alias_node.rvalue = module_stmt(allocator, parser)!;
+		default:     node.alias_node.rvalue = type(allocator, parser)!;
 	}
-	else
+
+	if (!parser.expect(SEMICOLON)!)
 	{
-		node.alias_node.rvalue = type(allocator, parser)!;
+		parser.report_error("expected a ';' token?");
+		return INVALID_AST?;
+	}
+
+	return node;
+}
+
+fn AstNode*? faultdef_stmt(Allocator allocator, YadgParser *parser)
+{
+	AstNode* node = allocator::new(allocator, AstNode);
+	node.type = AST_FAULTDEF;
+	node.faultdef_node.faults.init(allocator);
+
+	if (!parser.expect(FAULTDEF)!)
+	{
+		parser.report_error("exepected an 'FAULTDEF' token");
+		return INVALID_AST?;
+	}
+
+	while LOOP: (true)
+	{
+		switch (parser.peek().type)
+		{
+			case IDENT:
+				String f = parser.advance()!.lexeme().copy(allocator);
+				node.faultdef_node.faults.push(f);
+			case LCOMMENT:
+			case BCOMMENT:
+			case COMMA:
+				parser.advance()!;
+			default:
+				break LOOP;
+		}
 	}
 
 	if (!parser.expect(SEMICOLON)!)
@@ -446,7 +484,6 @@ fn AstNode*? type(Allocator allocator, YadgParser *parser) => @pool()
 		case KEYWORD:
 			sb.append_chars(parser.advance()!.lexeme());
 		case IDENT:
-			// SCOEP?
 			@pool() {
 				AstNode* ptr = scope(tmem, parser)!;
 				while (ptr != null)
@@ -484,6 +521,7 @@ fn AstNode*? call(Allocator allocator, YadgParser *parser)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
 	node.type = AST_CALL;
+	node.call.attrs.init(allocator);
 
 	if (!parser.expect(FUNC)!)
 	{
@@ -493,15 +531,20 @@ fn AstNode*? call(Allocator allocator, YadgParser *parser)
 
 	node.call.type   = type(allocator, parser)!;
 	node.call.callee = callee(allocator, parser)!;
-	io::printfn("type:    %s", node.call.type.str);
-	io::printfn("callee:  %s", node.call.callee.callee.receiver);
-	io::printfn("callee:  %s", node.call.callee.callee.call_name);
 	node.call.paren  = paren(allocator, parser)!;
+
+	while (parser.peek().type == ATTRIBUTE)
+	{
+		node.call.attrs.push(attr(allocator, parser)!);
+	}
 
 	switch (parser.peek().type)
 	{
 		case ARROW:
+			while (parser.peek().type != SEMICOLON) parser.advance()!;
+			parser.advance()!; // Consume ';'
 		case BRACE:
+			parser.advance()!; // Consume '{..}' or ';'
 		case SEMICOLON:
 			break;
 		default:

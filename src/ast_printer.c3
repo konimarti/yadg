@@ -73,22 +73,12 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			}
 			n += f.printf("%s\n", node.callee.call_name)!;
 
-		// case AST_BLOCK:
-		// 	n += f.print(prefix)!;
-		// 	n += f.printf("(block %s", node.block.name)!;
-		// 	if (node.block.methods.len())
-		// 	{
-		// 		n += f.printf("\n")!;
-		// 		foreach (method : node.block.methods) n += self.visit(method)!;
-		// 		n += f.print(prefix)!;
-		// 	}
-		// 	n += f.printf(")\n")!;
-
-		case AST_TYPE:
-		case AST_PAREN:
-		case AST_BRACE:
-			n += f.print(prefix)!;
-			n += f.printf("%s\n", node.str)!;
+		case AST_FAULTDEF:
+			foreach (fault_str : node.faultdef_node.faults)
+			{
+				n += f.print(prefix)!;
+				n += f.printf("%s\n", fault_str)!;
+			}
 
 		case AST_ATTR:
 			n += f.print(prefix)!;
@@ -99,7 +89,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			if (node.comment.str.len)
 			{
 				n += f.print(prefix)!;
-				n += f.printf("Ln: %d -- %s\n", node.comment.endln, node.comment.str)!;
+				n += f.printf("[Ln: %d] %s\n", node.comment.endln, node.comment.str)!;
 			}
 			else
 			{
@@ -111,6 +101,13 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += f.print(prefix)!;
 			n += f.printf("%s\n", node.scope.scope_name)!;
 			if (node.scope.next) n += self.visit(node.scope.next)!;
+
+		case AST_TYPE:
+		case AST_PAREN:
+		case AST_BRACE:
+			n += f.print(prefix)!;
+			n += f.printf("%s\n", node.str)!;
+
 
 		default:
 			n += f.print("<not implemented yet in printer>\n")!;
