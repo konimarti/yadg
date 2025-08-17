@@ -19,6 +19,7 @@ enum AstType
 	AST_MACRO,
 	AST_MODULE,
 	AST_STRUCT,
+	AST_TYPEDEF,
 
 	AST_ATTR,
 	AST_CALLEE,
@@ -247,14 +248,17 @@ fn AstNode*? stmt(Allocator allocator, YadgParser *parser)
 	switch(parser.peek().type)
 	{
 		case ALIAS:    node.stmt.node = alias_stmt(allocator, parser)!;
+		case TYPEDEF:  node.stmt.node = alias_stmt(allocator, parser, true)!;
 		case FUNC:     node.stmt.node = call(allocator, parser)!;
-		// case CONST:
-		// case ENUM:
 		case FAULTDEF: node.stmt.node = faultdef_stmt(allocator, parser)!;
 		case MACRO:    node.stmt.node = call(allocator, parser, true)!;
 		case MODULE:   node.stmt.node = module_stmt(allocator, parser)!;
+		// case CONST:
+		// case ENUM:
+		// case BITSTRUCT:
 		// case STRUCT:
 		default:
+			parser.synchronize()!;
 	}
 
 	return node;
@@ -375,21 +379,21 @@ fn AstNode*? paren(Allocator allocator, YadgParser *parser)
 	return node;
 }
 
-fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser)
+fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser, bool is_typedef = false)
 {
 	AstNode* node = allocator::new(allocator, AstNode);
-	node.type = AST_ALIAS;
+	node.type = is_typedef ? AST_TYPEDEF : AST_ALIAS;
 	node.alias_node.attrs.init(allocator);
 
-	if (!parser.expect(ALIAS)!)
+	if (!parser.expect(ALIAS)! && !parser.expect(TYPEDEF)!)
 	{
-		parser.report_error("expected an 'alias' token");
+		parser.report_error("alias/typedef: expected an 'ALIAS' or 'TYPEDEF' token");
 		return INVALID_AST?;
 	}
 
 	if (parser.peek().type != IDENT)
 	{
-		parser.report_error("expected an 'IDENT' token");
+		parser.report_error("alias/typedef: expected an 'IDENT' token");
 	}
 
 	node.alias_node.lvalue = type(allocator, parser)!;
@@ -401,7 +405,7 @@ fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser)
 
 	if (!parser.expect(ASSIGN)!)
 	{
-		parser.report_error("expected an 'ASSIGN' token?");
+		parser.report_error("alias/typedef: expected an 'ASSIGN' token?");
 		return INVALID_AST?;
 	}
 
@@ -417,7 +421,7 @@ fn AstNode*? alias_stmt(Allocator allocator, YadgParser *parser)
 
 	if (!parser.expect(SEMICOLON)!)
 	{
-		parser.report_error("expected a ';' token?");
+		parser.report_error("alias/typedef: expected a ';' token?");
 		return INVALID_AST?;
 	}
 

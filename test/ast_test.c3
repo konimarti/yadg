@@ -31,6 +31,19 @@ fn void test_document() @test
 	run_parser(input)!!;
 }
 
+fn void test_typedef() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* typedef comment 1 *>
+	typedef Char16** = uint[<3>];
+	<* typedef comment 1 *>
+	typedef WString = inline Char16*;
+	`;
+	run_parser(input)!!;
+	assert(false);
+}
+
 fn void test_faultdef() @test
 {
 	String input = `
@@ -41,7 +54,6 @@ fn void test_faultdef() @test
 		INVALID_MORE; /* block comt */
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
 
 fn void test_macro() @test
@@ -59,5 +71,4 @@ fn void test_macro() @test
 	macro int fn_add_2(#a, #b) => $$stringify(#a, #b);
 	`;
 	run_parser(input)!!;
-	assert(false);
 }

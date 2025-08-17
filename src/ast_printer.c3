@@ -55,6 +55,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += self.visit(node.module_stmt.scope)!;
 			foreach (attr : node.module_stmt.attrs) n += self.visit(attr)!;
 
+		case AST_TYPEDEF:
 		case AST_ALIAS:
 			n += self.visit(node.alias_node.lvalue)!;
 			foreach (attr : node.alias_node.attrs) n += self.visit(attr)!;

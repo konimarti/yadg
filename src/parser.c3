@@ -65,6 +65,26 @@ fn void YadgParser.report_error(&self, String err_msg)
 		self.lexer.ln, self.lexer.col, err_msg, self.next_token);
 }
 
+// Synchroinze discards token until the next semicolon or {..} block
+fn void? YadgParser.synchronize(&self)
+{
+	while LOOP: (true)
+	{
+		switch (self.peek().type)
+		{
+			case SEMICOLON:
+			case BRACE:
+				self.advance()!;
+				nextcase;
+			case EOF:
+				break LOOP;
+			default:
+				io::printfn("synchronize: discard %s", self.peek());
+				self.advance()!;
+		}
+	}
+}
+
 // Return next token that will be consumed next.
 fn Token YadgParser.peek(&self) => self.next_token;
 
