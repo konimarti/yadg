@@ -58,6 +58,16 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node._module.module_params)!;
 			foreach (attr : node._module.opt_attributes) n += self.visit(attr)!;
 
+		case AST_FAULT_DECLARATION:
+			foreach (top_level : node.translation_unit.top_level_stmts)
+			{
+				n += self.visit(top_level)!;
+			}
+
+		case AST_FAULTS:
+			n += write_token(f, prefix, node.faults.const_ident)!;
+			foreach (attr : node.faults.opt_attributes) n += self.visit(attr)!;
+
 		case AST_ATTRIBUTE:
 			n += write_token(f, prefix, node._attribute.attribute_name)!;
 			n += write_token(f, prefix, node._attribute.attribute_param)!;

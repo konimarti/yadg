@@ -12,25 +12,8 @@ enum AstType
 	AST_TOP_LEVEL,
 	AST_MODULE,
 	AST_ATTRIBUTE,
-
-	// -- border --
-
-	AST_STMT,
-	AST_ALIAS,
-	AST_CONST,
-	AST_ENUM,
-	AST_FAULTDEF,
-	AST_CALL,
-	AST_MACRO,
-	AST_STRUCT,
-	AST_TYPEDEF,
-
-	AST_CALLEE,
-	AST_TYPE,
-	AST_BRACE,
-	AST_PAREN,
-	AST_COMMENT,
-	AST_SCOPE
+	AST_FAULT_DECLARATION,
+	AST_FAULTS,
 }
 
 alias AstList = List{ AstNode* };
@@ -62,6 +45,15 @@ struct AstNode (Printable)
 			Token attribute_name;
 			Token attribute_param;
 		}
+		struct fault_declaration
+		{
+			AstList faults;
+		}
+		struct faults
+		{
+			Token   const_ident;
+			AstList opt_attributes;
+		}
 
 	}
 }
@@ -76,7 +68,10 @@ fn AstNode*? YadgParser.translation_unit(&self)
 	while (!self.expect(EOF)!)
 	{
 		top_level = self.top_level()!;
-		node.translation_unit.top_level_stmts.push(top_level);
+		if (top_level)
+		{
+			node.translation_unit.top_level_stmts.push(top_level);
+		}
 	}
 
 	return node;
@@ -84,28 +79,28 @@ fn AstNode*? YadgParser.translation_unit(&self)
 
 fn AstNode*? YadgParser.top_level(&self)
 {
-	AstNode* node = allocator::new(self.allocator, AstNode);
-	node.type = AST_TOP_LEVEL;
+	Token tok_comm, tok_ext;
+	AstNode *tl;
 
 	if (try c = self.comment())
 	{
-		node.top_level.comment = c;
+		tok_comm = c;
 	}
 
 	if (self.peek().type == EXTERN)
 	{
-		node.top_level.opt_extern = self.advance()!;
+		tok_ext = self.advance()!;
 	}
 
-	while (self.peek().type != EOF)
+	while LOOP: (self.peek().type != EOF && tl == null)
 	{
 		switch(self.peek().type)
 		{
-			case MODULE:   node.top_level.decl = self._module()!;
+			case MODULE:   tl = self._module()!;
+			case FAULTDEF: tl = self.fault_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
 			// case FUNC:     node.top_level.decl = self.call()!;
-			// case FAULTDEF: node.top_level.decl = self.faultdef_stmt()!;
 			// case MACRO:    node.top_level.decl = self.call()!;
 			// case CONST:
 			// case ENUM:
@@ -115,6 +110,13 @@ fn AstNode*? YadgParser.top_level(&self)
 		}
 	}
 
+	if (!tl) return null;
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_TOP_LEVEL;
+	node.top_level.decl = tl;
+	node.top_level.comment = tok_comm;
+	node.top_level.opt_extern = tok_ext;
 	return node;
 }
 
@@ -170,12 +172,7 @@ fn AstNode*? YadgParser._module(&self)
 		node._module.module_params = self.advance()!;
 	}
 
-	// opt_attributes
-	AstNode *ptr;
-	while ((ptr = self.opt_attributes()!) && ptr)
-	{
-		node._module.opt_attributes.push(ptr);
-	}
+	self.opt_attributes(&node._module.opt_attributes)!;
 
 	if (!self.expect(SEMICOLON)!)
 	{
@@ -186,10 +183,17 @@ fn AstNode*? YadgParser._module(&self)
 	return node;
 }
 
+// opt_attributes
+fn void? YadgParser.opt_attributes(&self, AstList *list)
+{
+	AstNode *ptr;
+	while ((ptr = self._attribute()!) && ptr) list.push(ptr);
+}
+
 <*
  Returns an Attribute node or null if no attribute was found.
 *>
-fn AstNode*? YadgParser.opt_attributes(&self)
+fn AstNode*? YadgParser._attribute(&self)
 {
 	if (self.peek().type != AT_IDENT && self.peek().type != AT_TYPE_IDENT)
 	{
@@ -211,4 +215,53 @@ fn AstNode*? YadgParser.opt_attributes(&self)
 	return node;
 }
 
+fn AstNode*? YadgParser.fault_declaration(&self)
+{
+	if (!self.expect(FAULTDEF)!)
+	{
+		self.report_error("fault_declaration: expected a 'FAULTDEF' token");
+		return INVALID_AST?;
+	}
 
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_FAULT_DECLARATION;
+	node.fault_declaration.faults.init(self.allocator);
+
+	AstNode *ptr;
+	while ((ptr = self.faults()!) && ptr)
+	{
+		node.fault_declaration.faults.push(ptr);
+		if (!self.expect(COMMA)!) break;
+	}
+
+	if (!self.expect(SEMICOLON)!)
+	{
+		self.report_error("fault_declaration: semicolon expected?");
+		return INVALID_AST?;
+	}
+
+	return node;
+}
+
+<*
+ Returns an Faults node or null if no attribute was found.
+*>
+fn AstNode*? YadgParser.faults(&self)
+{
+	(void)self.comment();
+
+	if (self.peek().type != CONST_IDENT) return null;
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_FAULTS;
+	node.faults.const_ident = self.advance()!;
+
+	(void)self.comment();
+
+	node.faults.opt_attributes.init(self.allocator);
+	self.opt_attributes(&node.faults.opt_attributes)!;
+
+	(void)self.comment();
+
+	return node;
+}

@@ -71,6 +71,7 @@ enum TokenType : ushort (String symbol)
 	// Keywords
 	AT_IDENT      = "",  // @
 	AT_TYPE_IDENT = "",  // @
+	CONST_IDENT   = "",
 	EXTERN        = "",  // @
 
 
@@ -197,10 +198,10 @@ fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '$' |
 
 enum IdentType
 {
-	INVALID,
-	CONST,
-	TYPE,
-	IDENT
+	STR_INVALID,
+	STR_CONST,
+	STR_TYPE,
+	STR_IDENT
 }
 
 fn IdentType classify(String s)
@@ -212,14 +213,14 @@ fn IdentType classify(String s)
 		switch
 		{
 			case c >= 'a' && c <= 'z': nocaps++;
-			case c >= 'A' && c <= 'Z': nocaps++;
+			case c >= 'A' && c <= 'Z': caps++;
 			case c == '_': n--;
 		}
 	}
-	if (caps && nocaps) return TYPE;
-	if (caps && nocaps == 0) return CONST;
-	if (caps == 0 && nocaps) return IDENT;
-	return INVALID;
+	if (caps && nocaps) return STR_TYPE;
+	if (caps && nocaps == 0) return STR_CONST;
+	if (caps == 0 && nocaps) return STR_IDENT;
+	return STR_INVALID;
 }
 
 fn char? Lexer.advance(&self)
@@ -587,8 +588,8 @@ fn Token? Lexer.lex_attribute(&self) => @pool()
 	TokenType type;
 	switch (classify(str[1..]))
 	{
-		case IDENT: type = AT_IDENT;
-		case TYPE:  type = AT_TYPE_IDENT;
+		case STR_IDENT: type = AT_IDENT;
+		case STR_TYPE:  type = AT_TYPE_IDENT;
 		default: return NOT_FOUND?;
 	}
 	return self.emit_token(type, str);
@@ -669,11 +670,26 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "isz":       return self.emit_token(KEYWORD, str);
 		case "usz":       return self.emit_token(KEYWORD, str);
 
-		default:          return self.emit_token(IDENT, str);
+		default:
+			TokenType type;
+			switch(classify(str))
+			{
+				case STR_CONST: type = CONST_IDENT;
+				case STR_TYPE:
+				case STR_IDENT:
+				default: type = IDENT;
+			}
+			return self.emit_token(type, str);
 	}
 }
 
 
+fn void test_classify_str() @test
+{
+	assert(classify("AABB") == STR_CONST);
+	assert(classify("Aabb") == STR_TYPE);
+	assert(classify("aabb") == STR_IDENT);
+}
 
 
 
