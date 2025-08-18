@@ -1,6 +1,7 @@
 module yadg::parser;
 
 import std::io;
+import yadg::lexer;
 
 fn void? output_stream_fn(void *data, char c)
 {
@@ -41,78 +42,28 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 	switch (node.type)
 	{
-		case AST_DOCUMENT:
-			foreach (stmt : node.document.stmts)
+		case AST_TRANSLATION_UNIT:
+			foreach (top_level : node.translation_unit.top_level_stmts)
 			{
-				n += self.visit(stmt)!;
+				n += self.visit(top_level)!;
 			}
 
-		case AST_STMT:
-			n += self.visit(node.stmt.comment)!;
-			n += self.visit(node.stmt.node)!;
+		case AST_TOP_LEVEL:
+			n += write_token(f, prefix, node.top_level.comment)!;
+			n += write_token(f, prefix, node.top_level.opt_extern)!;
+			n += self.visit(node.top_level.decl)!;
 
 		case AST_MODULE:
-			n += self.visit(node.module_stmt.scope)!;
-			foreach (attr : node.module_stmt.attrs) n += self.visit(attr)!;
+			n += write_token_list(f, prefix, node._module.path_ident)!;
+			n += write_token(f, prefix, node._module.module_params)!;
+			foreach (attr : node._module.opt_attributes) n += self.visit(attr)!;
 
-		case AST_TYPEDEF:
-		case AST_ALIAS:
-			n += self.visit(node.alias_node.lvalue)!;
-			foreach (attr : node.alias_node.attrs) n += self.visit(attr)!;
-			n += self.visit(node.alias_node.rvalue)!;
-
-		case AST_MACRO:
-		case AST_CALL:
-			n += self.visit(node.call.type)!;
-			n += self.visit(node.call.callee)!;
-			n += self.visit(node.call.paren)!;
-
-		case AST_CALLEE:
-			n += f.print(prefix)!;
-			if (node.callee.receiver.len)
-			{
-				n += f.printf("%s.", node.callee.receiver)!;
-			}
-			n += f.printf("%s\n", node.callee.call_name)!;
-
-		case AST_FAULTDEF:
-			foreach (fault_str : node.faultdef_node.faults)
-			{
-				n += f.print(prefix)!;
-				n += f.printf("%s\n", fault_str)!;
-			}
-
-		case AST_ATTR:
-			n += f.print(prefix)!;
-			n += f.printf("%s\n", node.attr.name)!;
-			if (node.attr.paren) n += self.visit(node.attr.paren)!;
-
-		case AST_COMMENT:
-			if (node.comment.str.len)
-			{
-				n += f.print(prefix)!;
-				n += f.printf("[Ln: %d] %s\n", node.comment.endln, node.comment.str)!;
-			}
-			else
-			{
-				n += f.print(prefix)!;
-				n += f.printf("<none>\n")!;
-			}
-
-		case AST_SCOPE:
-			n += f.print(prefix)!;
-			n += f.printf("%s\n", node.scope.scope_name)!;
-			if (node.scope.next) n += self.visit(node.scope.next)!;
-
-		case AST_TYPE:
-		case AST_PAREN:
-		case AST_BRACE:
-			n += f.print(prefix)!;
-			n += f.printf("%s\n", node.str)!;
-
+		case AST_ATTRIBUTE:
+			n += write_token(f, prefix, node._attribute.attribute_name)!;
+			n += write_token(f, prefix, node._attribute.attribute_param)!;
 
 		default:
-			n += f.print("<not implemented yet in printer>\n")!;
+			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}
 
 	// Closing the paren
@@ -122,3 +73,13 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	return n;
 }
 
+fn usz? write_token(Formatter *f, String prefix, Token tok) @inline
+{
+	if (tok.type == EMPTY) return 0;
+	return f.printf("%s%s\n", prefix, tok)!;
+}
+
+fn usz? write_token_list(Formatter *f, String prefix, TokenList list) @inline
+{
+	return f.printf("%s%s\n", prefix, list)!;
+}

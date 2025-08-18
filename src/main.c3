@@ -103,15 +103,7 @@ fn int main(String[] args)
 		// Parsing step;
 		io::printn(" -- YADG PARSER --");
 		input.seek(0, Seek.SET)!!;
-		@pool()
-		{
-			YadgParser *parser = (YadgParser){}.init(tmem, io::stdout());
-			AstNode* document = parser.parse(input)!!;
-			// io::printn(document);
-			AstPrinter printer;
-			printer.init();
-			printer.visit(document)!!;
-		};
+		parse_file(input)!!;
 	}
 
 	return 0;
@@ -153,7 +145,8 @@ fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 		defer (void)f.close();
 
 		io::printfn("-- scanning file: %s", path.str_view());
-		if (try scan_tokens(&f))
+		// if (try scan_tokens(&f))
+		if (try parse_file(&f))
 		{
 			report.pass++;
 		}
@@ -177,4 +170,14 @@ fn void? scan_tokens(InStream input) => @pool()
 		io::printn(tok);
 		if (tok.type == EOF) break;
 	}
+}
+
+fn void? parse_file(InStream input) => @pool()
+{
+	YadgParser *parser = (YadgParser){}.init(tmem, io::stdout());
+	AstNode* document = parser.parse(input)!;
+	// io::printn(document);
+	AstPrinter printer;
+	printer.init();
+	printer.visit(document)!;
 }

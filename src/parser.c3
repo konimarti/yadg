@@ -31,21 +31,24 @@ fn void YadgParser.free(&self)
 	*self = {};
 }
 
+<*
+ AstNode is allocated with the parser's allocator and must be freed by the
+ caller of this function.
+*>
 fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
 {
-	// Lexer is with temporary allocator; no need to free tokens
-	self.lexer = *(Lexer){}.init(tmem, file);
-	defer self.lexer.free();
+	// Lexer uses the same token as the parser; the returned AstNode must
+	// be freed by the caller.
+	self.lexer.init(self.allocator, file);
 
 	// Set next_token
 	self.next_token = self.lexer.next()!;
 
-	AstNode *doc = document(self.allocator, self)!;
+	AstNode *doc = self.translation_unit()!;
 
 	// Release unused resources
 	self.last_comment = {};
 	self.next_token = {};
-	self.lexer = {};
 
 	return doc;
 }

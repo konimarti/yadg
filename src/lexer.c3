@@ -69,7 +69,11 @@ enum TokenType : ushort (String symbol)
 	NUMBER    = "",  // 123, 1.0e-16, ..
 
 	// Keywords
-	ATTRIBUTE = "",  // @
+	AT_IDENT      = "",  // @
+	AT_TYPE_IDENT = "",  // @
+	EXTERN        = "",  // @
+
+
 	ALIAS     = "",  // alias
 	BITSTRUCT = "",  // bitstruct
 	CONST     = "",  // const
@@ -104,10 +108,10 @@ fn String Token.lexeme(&self)
 fn usz? Token.to_format(&self, Formatter *f) @dynamic
 {
 	usz n;
-	n += f.printf("%s ", self.range)!;
-	if (n < 9) n += f.printf("%*c", 9 - n, ' ')!;
-	n += f.printf("[%s]", self.type)!;
-	if (n < 20) n += f.printf("%*c", 20 - n, ' ')!;
+	// n += f.printf("%s ", self.range)!;
+	// if (n < 9) n += f.printf("%*c", 9 - n, ' ')!;
+	n += f.printf("<%s>", self.type)!;
+	// if (n < 20) n += f.printf("%*c", 20 - n, ' ')!;
 	if (self.text.len)
 	{
 		@pool() {
@@ -190,6 +194,33 @@ fn bool is_lf(char c) @inline => c == '\n';
 fn bool is_ws(char c) @inline => @ok(" \t\r\n".index_of_char(c));
 fn bool is_digit(char c) @inline => ascii::is_digit(c);
 fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '$' || c == '#';
+
+enum IdentType
+{
+	INVALID,
+	CONST,
+	TYPE,
+	IDENT
+}
+
+fn IdentType classify(String s)
+{
+	usz caps, nocaps, n;
+	n = s.len;
+	foreach (c : s)
+	{
+		switch
+		{
+			case c >= 'a' && c <= 'z': nocaps++;
+			case c >= 'A' && c <= 'Z': nocaps++;
+			case c == '_': n--;
+		}
+	}
+	if (caps && nocaps) return TYPE;
+	if (caps && nocaps == 0) return CONST;
+	if (caps == 0 && nocaps) return IDENT;
+	return INVALID;
+}
 
 fn char? Lexer.advance(&self)
 {
@@ -550,8 +581,17 @@ fn Token? Lexer.lex_attribute(&self) => @pool()
 	{
 		text.append_char(self.advance()!);
 	}
+
 	String str = text.str_view().copy(self.allocator);
-	return self.emit_token(ATTRIBUTE, str);
+
+	TokenType type;
+	switch (classify(str[1..]))
+	{
+		case IDENT: type = AT_IDENT;
+		case TYPE:  type = AT_TYPE_IDENT;
+		default: return NOT_FOUND?;
+	}
+	return self.emit_token(type, str);
 }
 
 fn Token? Lexer.lex_number(&self) => @pool()
@@ -610,8 +650,8 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "foreach":   return self.emit_token(KEYWORD, str);
 		case "foreach_r": return self.emit_token(KEYWORD, str);
 		case "tlocal":    return self.emit_token(KEYWORD, str);
-		case "extern":    return self.emit_token(KEYWORD, str);
 		case "inline":    return self.emit_token(KEYWORD, str);
+		case "extern":    return self.emit_token(EXTERN, str);
 		// Types
 		case "bool":      return self.emit_token(KEYWORD, str);
 		case "ichar":     return self.emit_token(KEYWORD, str);
@@ -632,8 +672,6 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		default:          return self.emit_token(IDENT, str);
 	}
 }
-
-
 
 
 
