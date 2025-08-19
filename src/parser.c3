@@ -78,7 +78,8 @@ fn void? YadgParser.synchronize(&self)
 			case SEMICOLON:
 			case BRACE:
 				self.advance()!;
-				nextcase;
+				io::printfn("stop synchro: next tok now: %s", self.peek());
+				nextcase EOF;
 			case EOF:
 				break LOOP;
 			default:

@@ -103,6 +103,16 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.interface_declaration_name.type_ident)!;
 			n += write_token_list(f, prefix, node.interface_declaration_name.interface_parents)!;
 
+		case AST_FUNC_DEFINITION:
+			n += self.visit(node.func_definition.func_header)!;
+			n += write_token(f, prefix, node.func_definition.fn_parameter_list)!;
+			foreach (attr : node.func_definition.opt_attributes) n += self.visit(attr)!;
+
+		case AST_FUNC_HEADER:
+			n += write_token_list(f, prefix, node.func_header.optional_type)!;
+			n += write_token_list(f, prefix, node.func_header.type)!;
+			n += write_token(f, prefix, node.func_header.func_macro_name)!;
+
 		case AST_INLINE:
 		case AST_EXTERN:
 			n += self.visit(node.child)!;
@@ -118,18 +128,20 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	return n;
 }
 
-fn usz? write_token(Formatter *f, String prefix, Token tok) @inline
+fn usz? write_token(Formatter *f, String prefix, Token tok) @inline @local
 {
 	if (tok.type == EMPTY) return 0;
 	return f.printf("%s%s\n", prefix, tok)!;
 }
 
-fn usz? write_token_list(Formatter *f, String prefix, TokenList list) @inline
+fn usz? write_token_list(Formatter *f, String prefix, TokenList list) @inline @local
 {
+	if (list.len() == 0) return 0;
 	return f.printf("%s%s\n", prefix, list)!;
 }
 
-fn usz? write_string(Formatter *f, String prefix, String s) @inline
+fn usz? write_string(Formatter *f, String prefix, String s) @inline @local
 {
+	if (s.len == 0) return 0;
 	return f.printf("%s%s\n", prefix, s)!;
 }

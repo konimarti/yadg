@@ -22,6 +22,8 @@ enum AstType
 	AST_INTERFACE_DECLARATION_NAME,
 	AST_INLINE,
 	AST_EXTERN,
+	AST_FUNC_DEFINITION,
+	AST_FUNC_HEADER,
 }
 
 alias AstList = List{ AstNode* };
@@ -99,6 +101,18 @@ struct AstNode (Printable)
 			Token     type_ident;
 			TokenList interface_parents;
 		}
+		struct func_definition
+		{
+			AstNode* func_header;
+			Token    fn_parameter_list; // paren
+			AstList  opt_attributes;
+		}
+		struct func_header
+		{
+			TokenList optional_type;
+			TokenList type;
+			Token func_macro_name;
+		}
 		AstNode* child; // inline, extern
 	}
 }
@@ -134,7 +148,7 @@ fn AstNode*? YadgParser.top_level(&self)
 
 	if (self.expect(EXTERN)!)
 	{
-		return selfself.._extern(self.top_level()!);
+		return self._extern(self.top_level()!);
 	}
 
 	while LOOP: (self.peek().type != EOF && tl == null)
@@ -148,13 +162,13 @@ fn AstNode*? YadgParser.top_level(&self)
 			case ENUM:      tl = self.enum_declaration()!;
 			case BITSTRUCT: tl = self.bitstruct_declaration()!;
 			case INTERFACE: tl = self.interface_declaration()!;
+			case FUNC:      tl = self.func_definition()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
-			// case FUNC:     node.top_level.decl = self.call()!;
 			// case MACRO:    node.top_level.decl = self.call()!;
 			// case CONST:
 			// case BITSTRUCT:
-			default: self.synchronize()!; continue;
+			default: self.synchronize()!; return self.top_level()!;
 		}
 	}
 
@@ -470,7 +484,7 @@ fn AstNode*? YadgParser.enum_spec(&self)
 	defer catch { node.enum_spec.base_type_no_generics.free(); allocator::free(self.allocator, node); }
 
 	// base_type_no_generics
-	self.type_no_generics(&node.enum_spec.base_type_no_generics, false)!;
+	self.type(&node.enum_spec.base_type_no_generics, false, false)!;
 
 	// enum_params
 	if (self.peek().type == PAREN)
@@ -567,7 +581,7 @@ fn AstNode*? YadgParser.bitstruct_declaration(&self)
 	}
 
 	// type_no_generics
-	self.type_no_generics(&node.bitstruct_declaration.type_no_generics)!;
+	self.type(&node.bitstruct_declaration.type_no_generics)!;
 
 	self.opt_attributes(&node.bitstruct_declaration.opt_attributes)!;
 
@@ -582,7 +596,22 @@ fn AstNode*? YadgParser.bitstruct_declaration(&self)
 }
 
 <*
- Parses a type_no_generics (if $type_suffic is false, it will parse a base_type_no_generics)
+ Parses a 'type_no_generics' as default (type_suffix = true, generic_params = false).
+
+ If 'type_suffix' is false => base_type_no_generics
+ If 'generic_params' is true => type (with opt_generic_params)
+
+
+type
+	: base_type
+	| type type_suffix;
+
+
+base_type
+	: base_type_no_user_defined
+	| TYPE_IDENT opt_generic_parameters
+        | path TYPE_IDENT opt_generic_parameters
+	;
 
 type_no_generics
 	: base_type_no_generics
@@ -600,7 +629,7 @@ type_suffix
 
  @param [&inout] list : "Pointer to a TokenList"
 *>
-fn void? YadgParser.type_no_generics(&self, TokenList* list, bool type_suffix = true)
+fn void? YadgParser.type(&self, TokenList* list, bool type_suffix = true, bool generic_params = false)
 {
 	//  base_type_no_generics
 	Token tok = self.peek();
@@ -623,13 +652,19 @@ fn void? YadgParser.type_no_generics(&self, TokenList* list, bool type_suffix = 
 			self.path(list)!;
 			if (self.peek().type != TYPE_IDENT)
 			{
-				self.report_error("expected a 'TYPE_IDENT' token");
+				self.report_error("type: expected a 'TYPE_IDENT' token");
 				return INVALID_AST?;
 			}
 			list.push(self.advance()!);
 	}
 
-	//  type_no_generics
+	//  opt_generics_param
+	if (generic_params)
+	{
+		if (self.peek().type == BRACE) list.push(self.advance()!);
+	}
+
+	//  type_suffix
 	if (type_suffix)
 	{
 		switch (self.peek().type)
@@ -639,6 +674,21 @@ fn void? YadgParser.type_no_generics(&self, TokenList* list, bool type_suffix = 
 				list.push(self.advance()!);
 			default:
 		}
+	}
+}
+
+<*
+optional_type
+	: type
+	| type '?'
+	;
+*>
+fn void? YadgParser.optional_type(&self, TokenList* list)
+{
+	self.type(list, true, true)!;
+	if (self.peek().type == QUESTION)
+	{
+		list.push(self.advance()!);
 	}
 }
 
@@ -709,6 +759,99 @@ fn AstNode*? YadgParser.interface_declaration_name(&self)
 			node.interface_declaration_name.interface_parents.push(self.advance()!);
 			if (self.expect(COMMA)!) continue;
 		}
+	}
+
+	return node;
+}
+
+<*
+func_definition
+	: func_defintion_decl
+	| FN func_header fn_parameter_list opt_attributes macro_func_body
+	;
+
+func_defintion_decl
+	: FN func_header fn_parameter_list opt_attributes ';'
+	;
+*>
+fn AstNode*? YadgParser.func_definition(&self)
+{
+	if (!self.expect(FUNC)!)
+	{
+		self.report_error("func_definition: expected a 'FUNC' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_FUNC_DEFINITION;
+	node.func_definition.opt_attributes.init(self.allocator);
+	defer catch {
+		node.func_definition.opt_attributes.free();
+		allocator::free(self.allocator, node);
+	}
+
+	node.func_definition.func_header = self.func_header()!;
+
+	if (self.peek().type != PAREN)
+	{
+		self.report_error("func_definition: expected 'fn_parameter_list' (a 'PAREN' token)");
+		return INVALID_AST?;
+	}
+	node.func_definition.fn_parameter_list = self.advance()!;
+
+	self.opt_attributes(&node.func_definition.opt_attributes)!;
+
+	// Handle 'macro_func_body'
+	switch (self.peek().type)
+	{
+		case SEMICOLON: // func_definition_decl
+		case BRACE:     // Regular func/macro body
+			self.advance()!;
+		case IMPLIES:
+			while (self.peek().type != EOF && self.peek().type != SEMICOLON)
+			{
+				self.advance()!;
+			}
+		default:
+			self.report_error("func_definition: expected a macro/func body");
+			return INVALID_AST?;
+	}
+
+	return node;
+}
+
+
+fn AstNode*? YadgParser.func_header(&self)
+{
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_FUNC_HEADER;
+	node.func_header.optional_type.init(self.allocator);
+	node.func_header.type.init(self.allocator);
+	defer catch {
+		node.func_header.optional_type.free();
+		node.func_header.type.free();
+		allocator::free(self.allocator, node);
+	}
+	self.optional_type(&node.func_header.optional_type)!;
+
+	if (self.peek().type == IDENT || self.peek().type == AT_IDENT)
+	{
+		node.func_header.func_macro_name = self.advance()!;
+		if (self.expect(SCOPE)!)
+		{
+			// Oops. We read a 'path'
+			node.func_header.type.push(node.func_header.func_macro_name);
+			self.type(&node.func_header.type, true, true)!;
+		}
+	}
+	else
+	{
+		self.type(&node.func_header.type, true, true)!;
+	}
+
+	if (self.expect(DOT)!)
+	{
+		node.func_header.func_macro_name = self.advance()!;
 	}
 
 	return node;

@@ -47,7 +47,7 @@ enum TokenType : ushort
 	BRACE, // {}
 	PAREN, // ()
 	BRACK, // []
-	ARROW,
+	IMPLIES, // =>
 
 	// Comparison
 	EQUAL,
@@ -400,7 +400,7 @@ fn Token? Lexer._next(&self) @private => @pool()
 			TokenType type;
 			switch (self.peek()!)
 			{
-				case '>': self.advance()!; type = ARROW;
+				case '>': self.advance()!; type = IMPLIES;
 				case '=': self.advance()!; type = EQUAL;
 				default : type = ASSIGN;
 			}

@@ -114,6 +114,25 @@ fn void test_interface_declaration() @test
 	run_parser(input)!!;
 }
 
+fn void test_func_definition() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* Method 'add' on Mystruct with an optional, generic return type *>
+	fn MyType{int, float}? MyStruct.add(&self, int hello) => self.value;
+	<* Method 'add2' with an optional, generic return type *>
+	fn MyType{int, float}? MyStruct.add(&self, int hello)
+	{
+		// function body
+	}
+	<* fn_add *>
+	fn int fn_add(int a, int b) @local
+	{
+	}
+	`;
+	run_parser(input)!!;
+}
+
 //
 // fn void test_typedef() @test
 // {
