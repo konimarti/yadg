@@ -426,7 +426,18 @@ fn Token? Lexer._next(&self) @private => @pool()
 		case '[': return self.lex_brack();
 
 		case '@': return self.lex_attribute();
-		case '/': return self.lex_comment()!;
+
+		// Don't emit line or block comments, only scan them.
+		//case '/': return self.lex_comment()!;
+		case '/':
+			self.advance()!; // consume '/'
+			switch (self.peek()!)
+			{
+				case '/': self.advance()!; self.scan_line_comment()!; return self._next();
+				case '*': self.advance()!; self.scan_block_comment()!; return self._next();;
+				default: return self.emit_token(DIV);
+			}
+
 		case '<': return self.lex_contract()!;
 		case '$': return self.lex_compile_time()!;
 		case '"':
