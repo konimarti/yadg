@@ -78,6 +78,18 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			foreach (attr : node.struct_declaration.opt_attributes) n += self.visit(attr)!;
 			n += write_token(f, prefix, node.struct_declaration.struct_body)!;
 
+		case AST_ENUM_DECLARATION:
+			n += write_token(f, prefix, node.enum_declaration.type_ident)!;
+			n += write_token(f, prefix, node.enum_declaration.opt_interface_impl)!;
+			n += self.visit(node.enum_declaration.enum_spec)!;
+			foreach (attr : node.enum_declaration.opt_attributes) n += self.visit(attr)!;
+			n += write_token(f, prefix, node.enum_declaration.enum_list)!;
+
+		case AST_ENUM_SPEC:
+			if (node.enum_spec.is_inline) n += write_string(f, prefix, "inline")!;
+			n += write_token_list(f, prefix, node.enum_spec.base_type_no_generics)!;
+			n += write_token(f, prefix, node.enum_spec.enum_params)!;
+
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}
@@ -98,4 +110,9 @@ fn usz? write_token(Formatter *f, String prefix, Token tok) @inline
 fn usz? write_token_list(Formatter *f, String prefix, TokenList list) @inline
 {
 	return f.printf("%s%s\n", prefix, list)!;
+}
+
+fn usz? write_string(Formatter *f, String prefix, String s) @inline
+{
+	return f.printf("%s%s\n", prefix, s)!;
 }

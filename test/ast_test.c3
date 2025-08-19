@@ -57,6 +57,26 @@ fn void test_struct_declaration() @test
 	run_parser(input)!!;
 }
 
+fn void test_enum_declaration() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* this is a enum comment *>
+	enum TestStruct (Printable) : inline $typefrom(Something) @local
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+
+	<* this is another enum comment *>
+	enum SomeUnion (OutStream) : path::to::Type (String s, int x)
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+	`;
+	run_parser(input)!!;
+}
+
+
 //
 // fn void test_typedef() @test
 // {

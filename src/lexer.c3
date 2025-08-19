@@ -6,92 +6,123 @@ import std::ascii;
 
 faultdef INVALID_CHAR;
 
-enum TokenType : ushort (String symbol)
+enum TokenType : ushort
 {
-	EMPTY     = "0",
+	EMPTY,
 
 	// Operators
-	TILDE     = "~",
-	QUESTION  = "?",
-	EMPTYOPT  = "??",
-	XOR       = "^",
-	EXCLAM    = "!",
-	UNWRAP    = "!!",
-	PIPE      = "|",
-	AMP       = "&",
-	AND       = "&&",
-	OR        = "||",
-	PLUS      = "+",
-	MINUS     = "-",
-	STAR      = "*",
-	DIV       = "/",
-	MODULUS   = "%",
-	RSHIFT    = ">>",
-	LSHIFT    = "<<",
-	ASSIGN	  = "=",
+	TILDE,
+	QUESTION,
+	EMPTYOPT,
+	XOR,
+	BANG,
+	BANGBANG,
+	AND,
+	ANDAND,
+	OR,
+	OROR,
+	PLUS,
+	MINUS,
+	STAR,
+	DIV,
+	MODULUS,
+	RSHIFT,
+	LSHIFT,
+	ASSIGN,
 
 	// Punctuation
-	SEMICOLON = ";",
-	COLON	  = ":",
-	SCOPE	  = "::",
-	COMMA	  = ",",
-	DOT	  = ".",
+	SEMICOLON,
+	COLON,
+	SCOPE,
+	COMMA,
+	DOT,
 
 	// Structure
-	// LBRACE    = "{",
-	// LPAREN    = "(",
-	// LBRACK	  = "[",
-	// RBRACE    = "}",
-	// RPAREN    = ")",
-	// RBRACK	  = "]",
-
-	BRACE     = "", // {}
-	PAREN     = "", // ()
-	BRACK	  = "", // [] will be lexed as IDENT
-
-	ARROW     = "=>",
+	// LBRACE,
+	// LPAREN,
+	// LBRACK,
+	// RBRACE,
+	// RPAREN,
+	// RBRACK,
+	BRACE, // {}
+	PAREN, // ()
+	BRACK, // []
+	ARROW,
 
 	// Comparison
-	EQUAL	  = "==",
-	LESS      = "<",
-	LESSEQ    = "<=",
-	GREATER   = ">",
-	GREATEREQ = ">=",
+	EQUAL,
+	LESS,
+	LESSEQ,
+	GREATER,
+	GREATEREQ,
 
 	// Comments and Contracts
-	CONTRACT  = "",  // <* *>
-	LCOMMENT  = "",  // Line comment //
-	BCOMMENT  = "",  // Block comment /* */
+	CONTRACT,  // <* *>
+	LCOMMENT,  // Line comment //
+	BCOMMENT,  // Block comment /* */
 
 	// Identifiers and Strings
-	IDENT     = "",	 // Identifiers (`MAX_GLOBAL`, `add`, ..)
-	STRING    = "",  // "..", '..', `..`
-	NUMBER    = "",  // 123, 1.0e-16, ..
+	IDENT,
+	STRING,
+	NUMBER,
+	AT_IDENT,
+	AT_TYPE_IDENT,
+	CONST_IDENT,
+	TYPE_IDENT,
 
 	// Keywords
-	AT_IDENT      = "",  // @
-	AT_TYPE_IDENT = "",  // @
-	CONST_IDENT   = "",
-	TYPE_IDENT    = "",
-	EXTERN        = "",  // @
-	STRUCT        = "",  // struct
-	UNION         = "",  // union
+	EXTERN,
+	INLINE,
+	STRUCT,
+	UNION,
+	ENUM,
 
+	ALIAS,
+	BITSTRUCT,
+	CONST,
+	FAULTDEF,
+	FUNC,
+	IMPORT,
+	MACRO,
+	MODULE,
+	TYPEDEF,
 
-	ALIAS     = "",  // alias
-	BITSTRUCT = "",  // bitstruct
-	CONST     = "",  // const
-	ENUM      = "",  // enum
-	FAULTDEF  = "",  // faultdef
-	FUNC      = "",  // fn
-	IMPORT    = "",  // import
-	MACRO     = "",  // macro
-	MODULE    = "",  // module
-	TYPEDEF   = "",  // typedef
+	KEYWORD,
 
-	KEYWORD   = "",  // "if", "else", types like ("int", "char", "uint")
+	// Base Types (base_type_no_generic)
+	VOID,
+	BOOL,
+	CHAR,
+	ICHAR,
+	SHORT,
+	USHORT,
+	INT,
+	UINT,
+	LONG,
+	ULONG,
+	INT128,
+	UINT128,
+	FLOAT,
+	DOUBLE,
+	FLOAT16,
+	BFLOAT16,
+	FLOAT128,
+	IPTR,
+	UPTR,
+	ISZ,
+	USZ,
+	FAULT,
+	ANY,
+	TYPEID,
+	CT_CONST_IDENT, // ${CONST}
+	CT_TYPE_IDENT,  // ${TYPE}
+	CT_IDENT,       // ${IDENT}
+	CT_TYPEOF,      // $typeof
+	CT_TYPEFROM,    // $typefrom (..)
+	CT_VATYPE,      // $vatype [..]
+	CT_EVALTYPE,    // $evaltype (..)
 
-	EOF       = "EOF",
+	EOF,
 }
 
 struct Token (Printable)
@@ -104,8 +135,7 @@ struct Token (Printable)
 
 fn String Token.lexeme(&self)
 {
-	if (self.text.len) return self.text.trim("\t\r\n");
-	return self.type.symbol;
+	return self.text.trim("\t\r\n");
 }
 
 fn usz? Token.to_format(&self, Formatter *f) @dynamic
@@ -196,7 +226,7 @@ fn void Lexer.report_error(&self, String msg)
 fn bool is_lf(char c) @inline => c == '\n';
 fn bool is_ws(char c) @inline => @ok(" \t\r\n".index_of_char(c));
 fn bool is_digit(char c) @inline => ascii::is_digit(c);
-fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '$' || c == '#';
+fn bool is_ident(char c) @inline => ascii::is_alnum(c) || c == '_' || c == '#';
 
 enum IdentType
 {
@@ -216,12 +246,12 @@ fn IdentType classify(String s)
 		{
 			case c >= 'a' && c <= 'z': nocaps++;
 			case c >= 'A' && c <= 'Z': caps++;
-			case c == '_': n--;
+			case c == '_' || c == '$' || c == '#': n--;
 		}
 	}
-	if (caps && nocaps) return STR_TYPE;
-	if (caps && nocaps == 0) return STR_CONST;
-	if (caps == 0 && nocaps) return STR_IDENT;
+	if (n && caps      && nocaps     ) return STR_TYPE;
+	if (n && caps      && nocaps == 0) return STR_CONST;
+	if (n && caps == 0 && nocaps     ) return STR_IDENT;
 	return STR_INVALID;
 }
 
@@ -330,11 +360,11 @@ fn Token? Lexer._next(&self) @private => @pool()
 			return self.emit_token(type);
 		case '!':
 			self.advance()!; // Consuem '!'
-			TokenType type = EXCLAM;
+			TokenType type = BANG;
 			if (self.peek()! == '!')
 			{
 				self.advance()!; // Consume '!'
-				type = UNWRAP;
+				type = BANGBANG;
 			}
 			return self.emit_token(type);
 		case '?':
@@ -348,20 +378,20 @@ fn Token? Lexer._next(&self) @private => @pool()
 			return self.emit_token(type);
 		case '|':
 			self.advance()!; // Consume '|'
-			TokenType type = PIPE;
+			TokenType type = OR;
 			if (self.peek()! == '|')
 			{
 				self.advance()!; // Consume '|'
-				type = OR;
+				type = OROR;
 			}
 			return self.emit_token(type);
 		case '&':
 			self.advance()!; // Consuem '&'
-			TokenType type = AMP;
+			TokenType type = AND;
 			if (self.peek()! == '&')
 			{
 				self.advance()!; // Consume '&'
-				type = AND;
+				type = ANDAND;
 			}
 			return self.emit_token(type);
 		case '=':
@@ -398,6 +428,7 @@ fn Token? Lexer._next(&self) @private => @pool()
 		case '@': return self.lex_attribute();
 		case '/': return self.lex_comment()!;
 		case '<': return self.lex_contract()!;
+		case '$': return self.lex_compile_time()!;
 		case '"':
 		case '\'':
 		case '`':
@@ -603,7 +634,10 @@ fn Token? Lexer.lex_number(&self) => @pool()
 	DString text = dstring::temp();
 	int i = 0;
 	while ((c = self.peek()!) && (is_digit(c) || c == '-' ||
-		(i > 0 && (c == '.' || c == 'e' || c == 'E'|| c == 'b' || c == 'B' || c == 'x' || c == 'X' || c == '_'))))
+		(i > 0 && (c == '.' || c == 'e' || c == 'E'||
+			c == 'b' || c == 'B' || c == 'x' || c == 'X' ||
+			c == 'o' || c == 'O' || c == 'p' || c == 'P' ||
+			c == '_'))))
 	{
 		text.append_char(self.advance()!);
 		i++;
@@ -654,24 +688,33 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "foreach":   return self.emit_token(KEYWORD, str);
 		case "foreach_r": return self.emit_token(KEYWORD, str);
 		case "tlocal":    return self.emit_token(KEYWORD, str);
-		case "inline":    return self.emit_token(KEYWORD, str);
+		case "inline":    return self.emit_token(INLINE, str);
 		case "extern":    return self.emit_token(EXTERN, str);
-		// Types
-		case "bool":      return self.emit_token(KEYWORD, str);
-		case "ichar":     return self.emit_token(KEYWORD, str);
-		case "char":      return self.emit_token(KEYWORD, str);
-		case "short":     return self.emit_token(KEYWORD, str);
-		case "ushort":    return self.emit_token(KEYWORD, str);
-		case "int":       return self.emit_token(KEYWORD, str);
-		case "uint":      return self.emit_token(KEYWORD, str);
-		case "long":      return self.emit_token(KEYWORD, str);
-		case "ulong":     return self.emit_token(KEYWORD, str);
-		case "int128":    return self.emit_token(KEYWORD, str);
-		case "uint128":   return self.emit_token(KEYWORD, str);
-		case "iptr":      return self.emit_token(KEYWORD, str);
-		case "uptr":      return self.emit_token(KEYWORD, str);
-		case "isz":       return self.emit_token(KEYWORD, str);
-		case "usz":       return self.emit_token(KEYWORD, str);
+		// Base Types
+		case "void":      return self.emit_token(VOID, str);
+		case "bool":      return self.emit_token(BOOL, str);
+		case "char":      return self.emit_token(CHAR, str);
+		case "ichar":     return self.emit_token(ICHAR, str);
+		case "short":     return self.emit_token(SHORT, str);
+		case "ushort":    return self.emit_token(USHORT, str);
+		case "int":       return self.emit_token(INT, str);
+		case "uint":      return self.emit_token(UINT, str);
+		case "long":      return self.emit_token(LONG, str);
+		case "ulong":     return self.emit_token(ULONG, str);
+		case "int128":    return self.emit_token(INT128, str);
+		case "uint128":   return self.emit_token(UINT128, str);
+		case "iptr":      return self.emit_token(IPTR, str);
+		case "uptr":      return self.emit_token(UPTR, str);
+		case "isz":       return self.emit_token(ISZ, str);
+		case "usz":       return self.emit_token(USZ, str);
+		case "float":     return self.emit_token(FLOAT, str);
+		case "double":    return self.emit_token(DOUBLE, str);
+		case "float16":   return self.emit_token(FLOAT16, str);
+		case "bfloat16":  return self.emit_token(BFLOAT16, str);
+		case "float128":  return self.emit_token(FLOAT128, str);
+		case "fault":     return self.emit_token(FAULT, str);
+		case "any":       return self.emit_token(ANY, str);
+		case "typeid":    return self.emit_token(TYPEID, str);
 
 		default:
 			TokenType type;
@@ -686,7 +729,6 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 	}
 }
 
-
 fn void test_classify_str() @test
 {
 	assert(classify("AABB") == STR_CONST);
@@ -695,6 +737,42 @@ fn void test_classify_str() @test
 }
 
 
+fn Token? Lexer.lex_compile_time(&self) => @pool()
+{
+	char c;
+	DString text = dstring::temp();
+	if (self.peek()! != '$')
+	{
+		self.report_error("expected '$'");
+		return INVALID_CHAR?;
+	}
+	text.append_char(self.advance()!); // Consume '$'
+	while ((c = self.peek()!) && (is_ident(c)))
+	{
+		text.append_char(self.advance()!);
+	}
+
+	String str = text.str_view().copy(self.allocator);
+	switch (str)
+	{
+		// Compile time
+		case "$typeof":   return self.emit_token(CT_TYPEOF, str);
+		case "$typefrom": return self.emit_token(CT_TYPEFROM, str);
+		case "$vatype":   return self.emit_token(CT_VATYPE, str);
+		case "$evaltype": return self.emit_token(CT_EVALTYPE, str);
+
+		default:
+			TokenType type;
+			switch(classify(str))
+			{
+				case STR_CONST: type = CT_CONST_IDENT;
+				case STR_TYPE:  type = CT_TYPE_IDENT;
+				case STR_IDENT: type = CT_IDENT;
+				default:        type = EMPTY;
+			}
+			return self.emit_token(type, str);
+	}
+}
 
 
 

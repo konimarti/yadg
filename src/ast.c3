@@ -15,6 +15,8 @@ enum AstType
 	AST_FAULT_DECLARATION,
 	AST_FAULTS,
 	AST_STRUCT_DECLARATION,
+	AST_ENUM_DECLARATION,
+	AST_ENUM_SPEC,
 }
 
 alias AstList = List{ AstNode* };
@@ -32,7 +34,7 @@ struct AstNode (Printable)
 		struct top_level
 		{
 			Token    comment;
-			Token    opt_extern;
+			Token    opt_extern; // TODO: we should make extern an ASTNode
 			AstNode* decl;
 		}
 		struct _module
@@ -61,6 +63,20 @@ struct AstNode (Printable)
 			Token   opt_interface_impl; // paren
 			AstList opt_attributes;
 			Token   struct_body; // brace
+		}
+		struct enum_declaration
+		{
+			Token    type_ident;
+			Token    opt_interface_impl; // paren
+			AstNode* enum_spec;
+			AstList  opt_attributes;
+			Token    enum_list; // brace
+		}
+		struct enum_spec
+		{
+			bool      is_inline;
+			TokenList base_type_no_generics; // base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
+			Token     enum_params; // paren
 		}
 	}
 }
@@ -107,12 +123,12 @@ fn AstNode*? YadgParser.top_level(&self)
 			case FAULTDEF: tl = self.fault_declaration()!;
 			case UNION:
 			case STRUCT:   tl = self.struct_declaration()!;
+			case ENUM:     tl = self.enum_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
 			// case FUNC:     node.top_level.decl = self.call()!;
 			// case MACRO:    node.top_level.decl = self.call()!;
 			// case CONST:
-			// case ENUM:
 			// case BITSTRUCT:
 			default: self.synchronize()!; continue;
 		}
@@ -169,11 +185,7 @@ fn AstNode*? YadgParser._module(&self)
 	node._module.opt_attributes.init(self.allocator);
 
 	// path_ident
-	while (self.peek().type != EOF && self.peek().type == IDENT)
-	{
-		node._module.path_ident.push(self.advance()!);
-		if (self.expect(SCOPE)!) continue;
-	}
+	self.path_ident(&node._module.path_ident)!;
 
 	if (self.peek().type == PAREN)
 	{
@@ -190,6 +202,30 @@ fn AstNode*? YadgParser._module(&self)
 
 	return node;
 }
+
+<*
+path
+	: IDENT SCOPE
+	| path IDENT SCOPE
+	;
+*>
+fn void? YadgParser.path(&self, TokenList *list)
+{
+	// path_ident
+	while (self.peek().type != EOF && self.peek().type == IDENT)
+	{
+		list.push(self.advance()!);
+		if (self.expect(SCOPE)!) continue;
+	}
+}
+
+<*
+path_ident
+	: path IDENT
+	| IDENT
+	;
+*>
+fn void? YadgParser.path_ident(&self, TokenList *list) => self.path(list);
 
 // opt_attributes
 fn void? YadgParser.opt_attributes(&self, AstList *list)
@@ -276,7 +312,6 @@ fn AstNode*? YadgParser.faults(&self)
 
 fn AstNode*? YadgParser.struct_declaration(&self)
 {
-	Token type_ident, opt_interface_impl;
 	if (!self.expect(STRUCT)! && !self.expect(UNION)!)
 	{
 		self.report_error("struct_declaration: expected a 'STRUCT' or 'UNION' token");
@@ -310,4 +345,173 @@ fn AstNode*? YadgParser.struct_declaration(&self)
 	node.struct_declaration.struct_body = self.advance()!;
 
 	return node;
+}
+
+<*
+enum_declaration
+	: ENUM TYPE_IDENT opt_interface_impl enum_spec opt_attributes '{' enum_list '}'
+	| ENUM TYPE_IDENT opt_interface_impl opt_attributes '{' enum_list '}'
+	;
+*>
+fn AstNode*? YadgParser.enum_declaration(&self)
+{
+	if (!self.expect(ENUM)!)
+	{
+		self.report_error("enum_declaration: expected a 'ENUM' token");
+		return INVALID_AST?;
+	}
+
+	if (self.peek().type != TYPE_IDENT)
+	{
+		self.report_error("enum_declaration: expected a 'TYPE_IDENT' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_ENUM_DECLARATION;
+	node.enum_declaration.opt_attributes.init(self.allocator);
+	defer catch { node.enum_declaration.opt_attributes.free(); allocator::free(self.allocator, node); }
+
+	// TYPE_IDENT
+	node.enum_declaration.type_ident = self.advance()!;
+
+	// opt_interface_impl
+	if (self.peek().type == PAREN)
+	{
+		node.enum_declaration.opt_interface_impl = self.advance()!;
+	}
+
+	// enum_spec
+	if (self.peek().type == COLON)
+	{
+		node.enum_declaration.enum_spec = self.enum_spec()!;
+	}
+
+	self.opt_attributes(&node.enum_declaration.opt_attributes)!;
+
+	if (self.peek().type != BRACE)
+	{
+		self.report_error("enum_declaration: expected the enum_list (a 'BRACE' token)");
+		return INVALID_AST?;
+	}
+	node.enum_declaration.enum_list = self.advance()!;
+
+	return node;
+}
+
+<*
+enum_spec
+	: ':' base_type_no_generics '(' enum_params ')'
+	| ':' INLINE base_type_no_generics '(' enum_params ')'
+        | ':' base_type_no_generics
+        | ':' INLINE base_type_no_generics
+        | ':' '(' enum_params ')'
+	;
+
+base_type_no_generics
+	: base_type_no_user_defined
+	| TYPE_IDENT
+        | path TYPE_IDENT
+	;
+
+path
+	: IDENT SCOPE
+	| path IDENT SCOPE
+	;
+
+*>
+fn AstNode*? YadgParser.enum_spec(&self)
+{
+	bool is_inline;
+	if (!self.expect(COLON)!)
+	{
+		self.report_error("enum_spec: expected a 'COLON' token");
+		return INVALID_AST?;
+	}
+
+	if (self.peek().type == INLINE)
+	{
+		is_inline = true;
+		self.advance()!; // Consume 'inline';
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_ENUM_SPEC;
+	node.enum_spec.base_type_no_generics.init(self.allocator);
+	defer catch { node.enum_spec.base_type_no_generics.free(); allocator::free(self.allocator, node); }
+
+	Token tok = self.peek();
+	switch
+	{
+		case is_base_type_no_generics(tok):
+		case tok.type == TYPE_IDENT:
+			node.enum_spec.base_type_no_generics.push(self.advance()!);
+			switch (tok.type)
+			{
+				case CT_TYPEOF:
+				case CT_TYPEFROM:
+				case CT_VATYPE:
+				case CT_EVALTYPE:
+					node.enum_spec.base_type_no_generics.push(self.advance()!);
+				default:
+			}
+		case tok.type == IDENT:
+			// { IDENT SCOPE } TYPE_IDENT
+			self.path(&node.enum_spec.base_type_no_generics)!;
+			if (self.peek().type != TYPE_IDENT)
+			{
+				self.report_error("enum_spec: expected a 'TYPE_IDENT' token");
+				return INVALID_AST?;
+			}
+			node.enum_spec.base_type_no_generics.push(self.advance()!);
+	}
+
+	// enum_params
+	if (self.peek().type == PAREN)
+	{
+		node.enum_spec.enum_params = self.advance()!;
+	}
+
+	return node;
+}
+
+fn bool is_base_type_no_generics(Token tok)
+{
+	switch (tok.type)
+	{
+		case VOID:
+		case BOOL:
+		case CHAR:
+		case ICHAR:
+		case SHORT:
+		case USHORT:
+		case INT:
+		case UINT:
+		case LONG:
+		case ULONG:
+		case INT128:
+		case UINT128:
+		case FLOAT:
+		case DOUBLE:
+		case FLOAT16:
+		case BFLOAT16:
+		case FLOAT128:
+		case IPTR:
+		case UPTR:
+		case ISZ:
+		case USZ:
+		case FAULT:
+		case ANY:
+		case TYPEID:
+		case CT_CONST_IDENT:
+		case CT_TYPE_IDENT:
+		case CT_IDENT:
+		case CT_TYPEOF:
+		case CT_TYPEFROM:
+		case CT_VATYPE:
+		case CT_EVALTYPE:
+			return true;
+		default:
+			return false;
+	}
 }
