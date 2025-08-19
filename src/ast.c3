@@ -21,6 +21,7 @@ enum AstType
 	AST_INTERFACE_DECLARATION,
 	AST_INTERFACE_DECLARATION_NAME,
 	AST_INLINE,
+	AST_EXTERN,
 }
 
 alias AstList = List{ AstNode* };
@@ -38,7 +39,6 @@ struct AstNode (Printable)
 		struct top_level
 		{
 			Token    comment;
-			Token    opt_extern; // TODO: we should make extern an ASTNode
 			AstNode* decl;
 		}
 		struct _module
@@ -124,7 +124,7 @@ fn AstNode*? YadgParser.translation_unit(&self)
 
 fn AstNode*? YadgParser.top_level(&self)
 {
-	Token tok_comm, tok_ext;
+	Token tok_comm;
 	AstNode *tl;
 
 	if (try c = self.comment())
@@ -132,9 +132,9 @@ fn AstNode*? YadgParser.top_level(&self)
 		tok_comm = c;
 	}
 
-	if (self.peek().type == EXTERN)
+	if (self.expect(EXTERN)!)
 	{
-		tok_ext = self.advance()!;
+		return selfself.._extern(self.top_level()!);
 	}
 
 	while LOOP: (self.peek().type != EOF && tl == null)
@@ -164,7 +164,6 @@ fn AstNode*? YadgParser.top_level(&self)
 	node.type = AST_TOP_LEVEL;
 	node.top_level.decl = tl;
 	node.top_level.comment = tok_comm;
-	node.top_level.opt_extern = tok_ext;
 	return node;
 }
 
@@ -423,10 +422,18 @@ fn AstNode*? YadgParser.enum_declaration(&self)
 	return node;
 }
 
-fn AstNode*? YadgParser._inline(&self, AstNode* child)
+fn AstNode* YadgParser._inline(&self, AstNode* child)
 {
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_INLINE;
+	node.child = child;
+	return node;
+}
+
+fn AstNode* YadgParser._extern(&self, AstNode* child)
+{
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_EXTERN;
 	node.child = child;
 	return node;
 }
@@ -455,7 +462,7 @@ path
 *>
 fn AstNode*? YadgParser.enum_spec(&self)
 {
-	if (self.expect(INLINE)!) return self._inline(self.enum_spec())!;
+	if (self.expect(INLINE)!) return self._inline(self.enum_spec());
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_ENUM_SPEC;

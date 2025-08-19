@@ -50,7 +50,6 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 		case AST_TOP_LEVEL:
 			n += write_token(f, prefix, node.top_level.comment)!;
-			n += write_token(f, prefix, node.top_level.opt_extern)!;
 			n += self.visit(node.top_level.decl)!;
 
 		case AST_MODULE:
@@ -105,6 +104,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token_list(f, prefix, node.interface_declaration_name.interface_parents)!;
 
 		case AST_INLINE:
+		case AST_EXTERN:
 			n += self.visit(node.child)!;
 
 		default:
