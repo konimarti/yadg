@@ -14,6 +14,7 @@ enum AstType
 	AST_ATTRIBUTE,
 	AST_FAULT_DECLARATION,
 	AST_FAULTS,
+	AST_STRUCT_DECLARATION,
 }
 
 alias AstList = List{ AstNode* };
@@ -54,7 +55,13 @@ struct AstNode (Printable)
 			Token   const_ident;
 			AstList opt_attributes;
 		}
-
+		struct struct_declaration
+		{
+			Token   type_ident;
+			Token   opt_interface_impl; // paren
+			AstList opt_attributes;
+			Token   struct_body; // brace
+		}
 	}
 }
 
@@ -98,6 +105,8 @@ fn AstNode*? YadgParser.top_level(&self)
 		{
 			case MODULE:   tl = self._module()!;
 			case FAULTDEF: tl = self.fault_declaration()!;
+			case UNION:
+			case STRUCT:   tl = self.struct_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
 			// case FUNC:     node.top_level.decl = self.call()!;
@@ -105,7 +114,6 @@ fn AstNode*? YadgParser.top_level(&self)
 			// case CONST:
 			// case ENUM:
 			// case BITSTRUCT:
-			// case STRUCT:
 			default: self.synchronize()!; continue;
 		}
 	}
@@ -262,6 +270,44 @@ fn AstNode*? YadgParser.faults(&self)
 	self.opt_attributes(&node.faults.opt_attributes)!;
 
 	(void)self.comment();
+
+	return node;
+}
+
+fn AstNode*? YadgParser.struct_declaration(&self)
+{
+	Token type_ident, opt_interface_impl;
+	if (!self.expect(STRUCT)! && !self.expect(UNION)!)
+	{
+		self.report_error("struct_declaration: expected a 'STRUCT' or 'UNION' token");
+		return INVALID_AST?;
+	}
+
+	if (self.peek().type != TYPE_IDENT)
+	{
+		self.report_error("struct_declaration: expected a 'TYPE_IDENT' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_STRUCT_DECLARATION;
+	node.struct_declaration.opt_attributes.init(self.allocator);
+
+	node.struct_declaration.type_ident = self.advance()!;
+
+	if (self.peek().type == PAREN)
+	{
+		node.struct_declaration.opt_interface_impl = self.advance()!;
+	}
+
+	self.opt_attributes(&node.struct_declaration.opt_attributes)!;
+
+	if (self.peek().type != BRACE)
+	{
+		self.report_error("struct_declaration: expected the struct body (a 'BRACE' token)");
+		return INVALID_AST?;
+	}
+	node.struct_declaration.struct_body = self.advance()!;
 
 	return node;
 }

@@ -72,7 +72,10 @@ enum TokenType : ushort (String symbol)
 	AT_IDENT      = "",  // @
 	AT_TYPE_IDENT = "",  // @
 	CONST_IDENT   = "",
+	TYPE_IDENT    = "",
 	EXTERN        = "",  // @
+	STRUCT        = "",  // struct
+	UNION         = "",  // union
 
 
 	ALIAS     = "",  // alias
@@ -85,7 +88,6 @@ enum TokenType : ushort (String symbol)
 	MACRO     = "",  // macro
 	MODULE    = "",  // module
 	TYPEDEF   = "",  // typedef
-	STRUCT    = "",  // struct
 
 	KEYWORD   = "",  // "if", "else", types like ("int", "char", "uint")
 
@@ -640,6 +642,7 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "typedef":   return self.emit_token(TYPEDEF, str);
 		case "enum":      return self.emit_token(ENUM, str);
 		case "struct":    return self.emit_token(STRUCT, str);
+		case "union":     return self.emit_token(UNION, str);
 		case "bitstruct": return self.emit_token(BITSTRUCT, str);
 		case "faultdef":  return self.emit_token(FAULTDEF, str);
 		// Explicit Keywords
@@ -675,7 +678,7 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 			switch(classify(str))
 			{
 				case STR_CONST: type = CONST_IDENT;
-				case STR_TYPE:
+				case STR_TYPE:  type = TYPE_IDENT;
 				case STR_IDENT:
 				default: type = IDENT;
 			}

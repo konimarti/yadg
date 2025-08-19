@@ -36,7 +36,25 @@ fn void test_faultdef() @test
 		INVALID_MORE_TEST; /* block comt */
 	`;
 	run_parser(input)!!;
-	assert(false);
+}
+
+fn void test_struct_declaration() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* this is a struct comment *>
+	struct TestStruct (Printable) @local
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+
+	<* this is a union comment *>
+	union SomeUnion (OutStream) @local
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+	`;
+	run_parser(input)!!;
 }
 
 //

@@ -72,6 +72,12 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node._attribute.attribute_name)!;
 			n += write_token(f, prefix, node._attribute.attribute_param)!;
 
+		case AST_STRUCT_DECLARATION:
+			n += write_token(f, prefix, node.struct_declaration.type_ident)!;
+			n += write_token(f, prefix, node.struct_declaration.opt_interface_impl)!;
+			foreach (attr : node.struct_declaration.opt_attributes) n += self.visit(attr)!;
+			n += write_token(f, prefix, node.struct_declaration.struct_body)!;
+
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}
