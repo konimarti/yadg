@@ -76,6 +76,24 @@ fn void test_enum_declaration() @test
 	run_parser(input)!!;
 }
 
+fn void test_bitstruct_declaration() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* this is a bitstruct comment *>
+	bitstruct TestStruct (Printable) : uint[<4>] @local
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+
+	<* this is another bitstruct comment *>
+	bitstruct SomeUnion : path::to::Type
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+	`;
+	run_parser(input)!!;
+}
 
 //
 // fn void test_typedef() @test

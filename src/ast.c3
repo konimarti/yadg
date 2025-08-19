@@ -17,6 +17,7 @@ enum AstType
 	AST_STRUCT_DECLARATION,
 	AST_ENUM_DECLARATION,
 	AST_ENUM_SPEC,
+	AST_BITSTRUCT_DECLARATION,
 }
 
 alias AstList = List{ AstNode* };
@@ -78,6 +79,15 @@ struct AstNode (Printable)
 			TokenList base_type_no_generics; // base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
 			Token     enum_params; // paren
 		}
+		struct bitstruct_declaration
+		{
+			Token     type_ident;
+			Token     opt_interface_impl; // paren
+			TokenList type_no_generics; // base_type_no_generics / type_no_generics type_suffix
+			AstList   opt_attributes;
+			Token     bitstruct_body; // brace
+		}
+
 	}
 }
 
@@ -119,11 +129,12 @@ fn AstNode*? YadgParser.top_level(&self)
 	{
 		switch(self.peek().type)
 		{
-			case MODULE:   tl = self._module()!;
-			case FAULTDEF: tl = self.fault_declaration()!;
+			case MODULE:    tl = self._module()!;
+			case FAULTDEF:  tl = self.fault_declaration()!;
 			case UNION:
-			case STRUCT:   tl = self.struct_declaration()!;
-			case ENUM:     tl = self.enum_declaration()!;
+			case STRUCT:    tl = self.struct_declaration()!;
+			case ENUM:      tl = self.enum_declaration()!;
+			case BITSTRUCT: tl = self.bitstruct_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
 			// case FUNC:     node.top_level.decl = self.call()!;
@@ -440,31 +451,8 @@ fn AstNode*? YadgParser.enum_spec(&self)
 	node.enum_spec.base_type_no_generics.init(self.allocator);
 	defer catch { node.enum_spec.base_type_no_generics.free(); allocator::free(self.allocator, node); }
 
-	Token tok = self.peek();
-	switch
-	{
-		case is_base_type_no_generics(tok):
-		case tok.type == TYPE_IDENT:
-			node.enum_spec.base_type_no_generics.push(self.advance()!);
-			switch (tok.type)
-			{
-				case CT_TYPEOF:
-				case CT_TYPEFROM:
-				case CT_VATYPE:
-				case CT_EVALTYPE:
-					node.enum_spec.base_type_no_generics.push(self.advance()!);
-				default:
-			}
-		case tok.type == IDENT:
-			// { IDENT SCOPE } TYPE_IDENT
-			self.path(&node.enum_spec.base_type_no_generics)!;
-			if (self.peek().type != TYPE_IDENT)
-			{
-				self.report_error("enum_spec: expected a 'TYPE_IDENT' token");
-				return INVALID_AST?;
-			}
-			node.enum_spec.base_type_no_generics.push(self.advance()!);
-	}
+	// base_type_no_generics
+	self.type_no_generics(&node.enum_spec.base_type_no_generics, false)!;
 
 	// enum_params
 	if (self.peek().type == PAREN)
@@ -513,5 +501,125 @@ fn bool is_base_type_no_generics(Token tok)
 			return true;
 		default:
 			return false;
+	}
+}
+
+<*
+bitstruct_declaration
+	: BITSTRUCT TYPE_IDENT opt_interface_impl ':' type_no_generics opt_attributes bitstruct_body
+	;
+*>
+fn AstNode*? YadgParser.bitstruct_declaration(&self)
+{
+	if (!self.expect(BITSTRUCT)!)
+	{
+		self.report_error("bitstruct_declaration: expected a 'BITSTRUCT' token");
+		return INVALID_AST?;
+	}
+
+	if (self.peek().type != TYPE_IDENT)
+	{
+		self.report_error("bitstruct_declaration: expected a 'TYPE_IDENT' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_BITSTRUCT_DECLARATION;
+	node.bitstruct_declaration.type_no_generics.init(self.allocator);
+	node.bitstruct_declaration.opt_attributes.init(self.allocator);
+	defer catch {
+		node.bitstruct_declaration.type_no_generics.free();
+		node.bitstruct_declaration.opt_attributes.free();
+		allocator::free(self.allocator, node);
+	}
+
+	// TYPE_IDENT
+	node.bitstruct_declaration.type_ident = self.advance()!;
+
+	// opt_interface_impl
+	if (self.peek().type == PAREN)
+	{
+		node.bitstruct_declaration.opt_interface_impl = self.advance()!;
+	}
+
+	if (!self.expect(COLON)!)
+	{
+		self.report_error("bitstruct_declaration: expected a 'COLON' token");
+		return INVALID_AST?;
+	}
+
+	// type_no_generics
+	self.type_no_generics(&node.bitstruct_declaration.type_no_generics)!;
+
+	self.opt_attributes(&node.bitstruct_declaration.opt_attributes)!;
+
+	if (self.peek().type != BRACE)
+	{
+		self.report_error("bitstruct_declaration: expected the bitstruct_body (a 'BRACE' token)");
+		return INVALID_AST?;
+	}
+	node.bitstruct_declaration.bitstruct_body = self.advance()!;
+
+	return node;
+}
+
+<*
+ Parses a type_no_generics (if $type_suffic is false, it will parse a base_type_no_generics)
+
+type_no_generics
+	: base_type_no_generics
+	| type_no_generics type_suffix
+	;
+
+type_suffix
+	: '*'
+	| '[' constant_expr ']'
+        | '[' ']'
+        | '[' '*' ']'
+        | LVEC constant_expr RVEC
+        | LVEC '*' RVEC
+        ;
+
+ @param [&inout] list : "Pointer to a TokenList"
+*>
+fn void? YadgParser.type_no_generics(&self, TokenList* list, bool type_suffix = true)
+{
+	//  base_type_no_generics
+	Token tok = self.peek();
+	switch
+	{
+		case is_base_type_no_generics(tok):
+		case tok.type == TYPE_IDENT:
+			list.push(self.advance()!);
+			switch (tok.type)
+			{
+				case CT_TYPEOF:
+				case CT_TYPEFROM:
+				case CT_VATYPE:
+				case CT_EVALTYPE:
+					list.push(self.advance()!);
+				default:
+			}
+		case tok.type == IDENT:
+			// { IDENT SCOPE } TYPE_IDENT
+			self.path(list)!;
+			if (self.peek().type != TYPE_IDENT)
+			{
+				self.report_error("expected a 'TYPE_IDENT' token");
+				return INVALID_AST?;
+			}
+			list.push(self.advance()!);
+	}
+
+	//  type_no_generics
+	if (type_suffix)
+	{
+		switch (self.peek().type)
+		{
+			case STAR:
+			case BRACK:
+				list.push(self.advance()!);
+			default:
+		}
 	}
 }

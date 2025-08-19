@@ -90,6 +90,13 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token_list(f, prefix, node.enum_spec.base_type_no_generics)!;
 			n += write_token(f, prefix, node.enum_spec.enum_params)!;
 
+		case AST_BITSTRUCT_DECLARATION:
+			n += write_token(f, prefix, node.bitstruct_declaration.type_ident)!;
+			n += write_token(f, prefix, node.bitstruct_declaration.opt_interface_impl)!;
+			n += write_token_list(f, prefix, node.bitstruct_declaration.type_no_generics)!;
+			foreach (attr : node.bitstruct_declaration.opt_attributes) n += self.visit(attr)!;
+			n += write_token(f, prefix, node.bitstruct_declaration.bitstruct_body)!;
+
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}
