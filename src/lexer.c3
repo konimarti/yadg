@@ -76,15 +76,16 @@ enum TokenType : ushort
 	STRUCT,
 	UNION,
 	ENUM,
+	MODULE,
+	BITSTRUCT,
+	FAULTDEF,
+	INTERFACE,
 
 	ALIAS,
-	BITSTRUCT,
 	CONST,
-	FAULTDEF,
 	FUNC,
 	IMPORT,
 	MACRO,
-	MODULE,
 	TYPEDEF,
 
 	KEYWORD,
@@ -690,6 +691,7 @@ fn Token? Lexer.lex_ident(&self) => @pool()
 		case "union":     return self.emit_token(UNION, str);
 		case "bitstruct": return self.emit_token(BITSTRUCT, str);
 		case "faultdef":  return self.emit_token(FAULTDEF, str);
+		case "interface": return self.emit_token(INTERFACE, str);
 		// Explicit Keywords
 		case "if":        return self.emit_token(KEYWORD, str);
 		case "else":      return self.emit_token(KEYWORD, str);

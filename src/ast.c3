@@ -18,6 +18,8 @@ enum AstType
 	AST_ENUM_DECLARATION,
 	AST_ENUM_SPEC,
 	AST_BITSTRUCT_DECLARATION,
+	AST_INTERFACE_DECLARATION,
+	AST_INTERFACE_DECLARATION_NAME,
 }
 
 alias AstList = List{ AstNode* };
@@ -87,6 +89,16 @@ struct AstNode (Printable)
 			AstList   opt_attributes;
 			Token     bitstruct_body; // brace
 		}
+		struct interface_declaration
+		{
+			AstNode*  interface_declaration_name;
+			Token     interface_body; // brace
+		}
+		struct interface_declaration_name
+		{
+			Token     type_ident;
+			TokenList interface_parents;
+		}
 
 	}
 }
@@ -135,6 +147,7 @@ fn AstNode*? YadgParser.top_level(&self)
 			case STRUCT:    tl = self.struct_declaration()!;
 			case ENUM:      tl = self.enum_declaration()!;
 			case BITSTRUCT: tl = self.bitstruct_declaration()!;
+			case INTERFACE: tl = self.interface_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
 			// case FUNC:     node.top_level.decl = self.call()!;
@@ -622,4 +635,76 @@ fn void? YadgParser.type_no_generics(&self, TokenList* list, bool type_suffix = 
 			default:
 		}
 	}
+}
+
+<*
+interface_declaration
+	: INTERFACE interface_declaration_name '{' '}'
+	| INTERFACE interface_declaration_name '{' interface_body '}'
+	;
+*>
+fn AstNode*? YadgParser.interface_declaration(&self)
+{
+	if (!self.expect(INTERFACE)!)
+	{
+		self.report_error("interface_declaration: expected a 'INTERFACE' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_INTERFACE_DECLARATION;
+	node.interface_declaration.interface_declaration_name = self.interface_declaration_name()!;
+	defer catch allocator::free(self.allocator, node);
+
+	if (self.peek().type != BRACE)
+	{
+		self.report_error("interface_declaration: expected the interface_body (a 'BRACE' token)");
+		return INVALID_AST?;
+	}
+	node.interface_declaration.interface_body = self.advance()!;
+
+	return node;
+}
+
+<*
+interface_declaration_name
+	: TYPE_IDENT
+	| TYPE_IDENT ':' interface_parents
+	;
+
+interface_parents
+	: TYPE_IDENT
+	| interface_parents ',' TYPE_IDENT
+	;
+
+*>
+fn AstNode*? YadgParser.interface_declaration_name(&self)
+{
+	if (self.peek().type != TYPE_IDENT)
+	{
+		self.report_error("interface_declaration_name: expected a 'TYPE_IDENT' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_INTERFACE_DECLARATION_NAME;
+	node.interface_declaration_name.type_ident = self.advance()!;
+	node.interface_declaration_name.interface_parents.init(self.allocator);
+	defer catch {
+		node.interface_declaration_name.interface_parents.free();
+		allocator::free(self.allocator, node);
+	}
+
+	// interface_parents
+	if (self.expect(COLON)!)
+	{
+		// interface_parents as TYPE_IDENT ','
+		while (self.peek().type != EOF && self.peek().type == TYPE_IDENT)
+		{
+			node.interface_declaration_name.interface_parents.push(self.advance()!);
+			if (self.expect(COMMA)!) continue;
+		}
+	}
+
+	return node;
 }

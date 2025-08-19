@@ -97,6 +97,14 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			foreach (attr : node.bitstruct_declaration.opt_attributes) n += self.visit(attr)!;
 			n += write_token(f, prefix, node.bitstruct_declaration.bitstruct_body)!;
 
+		case AST_INTERFACE_DECLARATION:
+			n += self.visit(node.interface_declaration.interface_declaration_name)!;
+			n += write_token(f, prefix, node.interface_declaration.interface_body)!;
+
+		case AST_INTERFACE_DECLARATION_NAME:
+			n += write_token(f, prefix, node.interface_declaration_name.type_ident)!;
+			n += write_token_list(f, prefix, node.interface_declaration_name.interface_parents)!;
+
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}

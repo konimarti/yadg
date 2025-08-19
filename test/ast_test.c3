@@ -95,6 +95,26 @@ fn void test_bitstruct_declaration() @test
 	run_parser(input)!!;
 }
 
+fn void test_interface_declaration() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* this is a interface comment *>
+	interface TestStruct
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+
+	<* this is another interface comment *>
+	interface SomeUnion : Printable, OutStream
+	{
+		// some content which is currently neither lexed nor parsed
+	}
+	`;
+	run_parser(input)!!;
+	assert(false);
+}
+
 //
 // fn void test_typedef() @test
 // {
