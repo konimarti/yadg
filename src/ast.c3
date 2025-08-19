@@ -208,6 +208,12 @@ fn Token? YadgParser.comment(&self)
 	return comment;
 }
 
+<*
+module
+	: MODULE path_ident opt_attributes ';'
+	| MODULE path_ident '{' module_params '}' opt_attributes ';'
+	;
+*>
 fn AstNode*? YadgParser._module(&self)
 {
 	if (!self.expect(MODULE)!)
@@ -224,7 +230,7 @@ fn AstNode*? YadgParser._module(&self)
 	// path_ident
 	self.path_ident(&node._module.path_ident)!;
 
-	if (self.peek().type == PAREN)
+	if (self.peek().type == BRACE)
 	{
 		node._module.module_params = self.advance()!;
 	}

@@ -22,6 +22,9 @@ fn void test_translation_unit() @test
 
 	// no comment for this one
 	module foo::bar @if(!env::LINUX);
+
+	// no comment for this one
+	module foo::bar {KEY, VALUE} @if(!env::LINUX);
 	`;
 	run_parser(input)!!;
 }
