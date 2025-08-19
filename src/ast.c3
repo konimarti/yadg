@@ -20,6 +20,7 @@ enum AstType
 	AST_BITSTRUCT_DECLARATION,
 	AST_INTERFACE_DECLARATION,
 	AST_INTERFACE_DECLARATION_NAME,
+	AST_INLINE,
 }
 
 alias AstList = List{ AstNode* };
@@ -77,7 +78,6 @@ struct AstNode (Printable)
 		}
 		struct enum_spec
 		{
-			bool      is_inline;
 			TokenList base_type_no_generics; // base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
 			Token     enum_params; // paren
 		}
@@ -99,7 +99,7 @@ struct AstNode (Printable)
 			Token     type_ident;
 			TokenList interface_parents;
 		}
-
+		AstNode* child; // inline, extern
 	}
 }
 
@@ -406,7 +406,7 @@ fn AstNode*? YadgParser.enum_declaration(&self)
 	}
 
 	// enum_spec
-	if (self.peek().type == COLON)
+	if (self.expect(COLON)!)
 	{
 		node.enum_declaration.enum_spec = self.enum_spec()!;
 	}
@@ -423,7 +423,17 @@ fn AstNode*? YadgParser.enum_declaration(&self)
 	return node;
 }
 
+fn AstNode*? YadgParser._inline(&self, AstNode* child)
+{
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_INLINE;
+	node.child = child;
+	return node;
+}
+
 <*
+Colon is already consumed when enum_spec() is called.
+
 enum_spec
 	: ':' base_type_no_generics '(' enum_params ')'
 	| ':' INLINE base_type_no_generics '(' enum_params ')'
@@ -442,22 +452,10 @@ path
 	: IDENT SCOPE
 	| path IDENT SCOPE
 	;
-
 *>
 fn AstNode*? YadgParser.enum_spec(&self)
 {
-	bool is_inline;
-	if (!self.expect(COLON)!)
-	{
-		self.report_error("enum_spec: expected a 'COLON' token");
-		return INVALID_AST?;
-	}
-
-	if (self.peek().type == INLINE)
-	{
-		is_inline = true;
-		self.advance()!; // Consume 'inline';
-	}
+	if (self.expect(INLINE)!) return self._inline(self.enum_spec())!;
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_ENUM_SPEC;

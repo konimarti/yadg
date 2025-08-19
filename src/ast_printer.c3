@@ -86,7 +86,6 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.enum_declaration.enum_list)!;
 
 		case AST_ENUM_SPEC:
-			if (node.enum_spec.is_inline) n += write_string(f, prefix, "inline")!;
 			n += write_token_list(f, prefix, node.enum_spec.base_type_no_generics)!;
 			n += write_token(f, prefix, node.enum_spec.enum_params)!;
 
@@ -104,6 +103,9 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_INTERFACE_DECLARATION_NAME:
 			n += write_token(f, prefix, node.interface_declaration_name.type_ident)!;
 			n += write_token_list(f, prefix, node.interface_declaration_name.interface_parents)!;
+
+		case AST_INLINE:
+			n += self.visit(node.child)!;
 
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;

@@ -112,7 +112,6 @@ fn void test_interface_declaration() @test
 	}
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
 
 //
