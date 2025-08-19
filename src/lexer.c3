@@ -649,7 +649,8 @@ fn Token? Lexer.lex_number(&self) => @pool()
 		(i > 0 && (c == '.' || c == 'e' || c == 'E'||
 			c == 'b' || c == 'B' || c == 'x' || c == 'X' ||
 			c == 'o' || c == 'O' || c == 'p' || c == 'P' ||
-			c == '_'))))
+			c == 'u' || c == 'U' || c == 'l' || c == 'L' ||
+			c == 'i' || c == 'f' || c == 'd' || c == '_'))))
 	{
 		text.append_char(self.advance()!);
 		i++;

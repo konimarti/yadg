@@ -22,6 +22,7 @@ enum AstType
 	AST_INTERFACE_DECLARATION_NAME,
 	AST_INLINE,
 	AST_EXTERN,
+	AST_CONST,
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
 }
@@ -458,6 +459,14 @@ fn AstNode* YadgParser._extern(&self, AstNode* child)
 	return node;
 }
 
+fn AstNode* YadgParser._const(&self, AstNode* child)
+{
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_CONST;
+	node.child = child;
+	return node;
+}
+
 <*
 Colon is already consumed when enum_spec() is called.
 
@@ -483,6 +492,7 @@ path
 fn AstNode*? YadgParser.enum_spec(&self)
 {
 	if (self.expect(INLINE)!) return self._inline(self.enum_spec());
+	if (self.expect(CONST)!) return self._const(self.enum_spec());
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_ENUM_SPEC;
