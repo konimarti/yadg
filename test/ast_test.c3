@@ -132,8 +132,17 @@ fn void test_func_definition() @test
 	fn int fn_add(int a, int b) @local
 	{
 	}
+
+	fn void*[] capture_current(void*[] buffer) {}
+
+	module std::math::nolibc @if(env::NO_LIBC || $feature(C3_MATH));
+	fn float logf(float x) @extern("logf")
+	{
+		return 0.0;
+	}
 	`;
 	run_parser(input)!!;
+	assert(false);
 }
 
 //

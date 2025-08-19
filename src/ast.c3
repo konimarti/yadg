@@ -673,12 +673,17 @@ fn void? YadgParser.type(&self, TokenList* list, bool type_suffix = true, bool g
 	//  type_suffix
 	if (type_suffix)
 	{
-		switch (self.peek().type)
+		while TYPE_SUFFIX: (self.peek().type != EOF)
 		{
-			case STAR:
-			case BRACK:
-				list.push(self.advance()!);
-			default:
+			switch (self.peek().type)
+			{
+				case STAR:
+				case BRACK:
+					list.push(self.advance()!);
+					continue;
+				default:
+					break TYPE_SUFFIX;
+			}
 		}
 	}
 }
