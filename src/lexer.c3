@@ -646,7 +646,7 @@ fn Token? Lexer.lex_number(&self) => @pool()
 	DString text = dstring::temp();
 	int i = 0;
 	while ((c = self.peek()!) && (is_digit(c) || c == '-' ||
-		(i > 0 && (c == '.' || c == 'e' || c == 'E'||
+		(i > 0 && (c == '.' || c == 'e' || c == 'E'|| c == '+' ||
 			c == 'b' || c == 'B' || c == 'x' || c == 'X' ||
 			c == 'o' || c == 'O' || c == 'p' || c == 'P' ||
 			c == 'u' || c == 'U' || c == 'l' || c == 'L' ||

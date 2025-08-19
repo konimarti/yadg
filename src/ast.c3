@@ -833,6 +833,8 @@ fn AstNode*? YadgParser.func_definition(&self)
 			{
 				self.advance()!;
 			}
+		case EOF:
+			break;
 		default:
 			self.report_error("func_definition: expected a macro/func body");
 			return INVALID_AST?;
