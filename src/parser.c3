@@ -96,6 +96,7 @@ fn Token YadgParser.peek(&self) => self.next_token;
 fn Token? YadgParser.advance(&self)
 {
 	Token consumed = self.next_token;
+	io::printfn("Token consumed: %s", consumed);
 	self.next_token = self.lexer.next()!;
 	return consumed;
 }

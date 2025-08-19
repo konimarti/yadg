@@ -129,9 +129,7 @@ fn void test_func_definition() @test
 		// function body
 	}
 	<* fn_add *>
-	fn int fn_add(int a, int b) @local
-	{
-	}
+	fn int fn_add(int a, int b) @local {}
 
 	fn void*[] capture_current(void*[] buffer) {}
 
@@ -140,6 +138,30 @@ fn void test_func_definition() @test
 	{
 		return 0.0;
 	}
+
+	fn int? String.fn_add(int a, int b) @local {}
+	`;
+	run_parser(input)!!;
+}
+
+fn void test_macro() @test
+{
+	String input = `
+	module foo::bar::macro_test;
+
+	<* macro without return type *>
+	macro fn_add(#a, #b)
+	{
+		return $$stringify(#a, #b);
+	}
+
+	<* macro with return type *>
+	macro int fn_add_2(#a, #b) => $stringify(#a, #b);
+
+	macro int? String.add(#a, #b) {}
+	macro int String.add(#a, #b) {}
+	macro String.add(#a, #b) {} // ERROR
+	macro add(#a, #b) {}
 	`;
 	run_parser(input)!!;
 }
@@ -174,19 +196,3 @@ fn void test_func_definition() @test
 // 	run_parser(input)!!;
 // }
 //
-// fn void test_macro() @test
-// {
-// 	String input = `
-// 	module foo::bar::macro_test;
-//
-// 	<* macro without return type *>
-// 	macro fn_add(#a, #b)
-// 	{
-// 		return $$stringify(#a, #b);
-// 	}
-//
-// 	<* macro with return type *>
-// 	macro int fn_add_2(#a, #b) => $$stringify(#a, #b);
-// 	`;
-// 	run_parser(input)!!;
-// }

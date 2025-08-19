@@ -4,7 +4,7 @@ import yadg::lexer;
 import std::collections::list;
 import std::io;
 
-faultdef INVALID_AST;
+faultdef INVALID_AST, INVALID_TYPE;
 
 enum AstType
 {
@@ -25,6 +25,7 @@ enum AstType
 	AST_CONST,
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
+	AST_MACRO_DECLARATION,
 }
 
 alias AstList = List{ AstNode* };
@@ -114,6 +115,12 @@ struct AstNode (Printable)
 			TokenList type;
 			Token func_macro_name;
 		}
+		struct macro_declaration
+		{
+			AstNode* macro_header;
+			Token    macro_params; // paren
+			AstList  opt_attributes;
+		}
 		AstNode* child; // inline, extern
 	}
 }
@@ -164,9 +171,9 @@ fn AstNode*? YadgParser.top_level(&self)
 			case BITSTRUCT: tl = self.bitstruct_declaration()!;
 			case INTERFACE: tl = self.interface_declaration()!;
 			case FUNC:      tl = self.func_definition()!;
+			case MACRO:     tl = self.macro_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
-			// case MACRO:    node.top_level.decl = self.call()!;
 			// case CONST:
 			// case BITSTRUCT:
 			default: self.synchronize()!; return self.top_level()!;
@@ -666,11 +673,7 @@ fn void? YadgParser.type(&self, TokenList* list, bool type_suffix = true, bool g
 		case tok.type == IDENT:
 			// { IDENT SCOPE } TYPE_IDENT
 			self.path(list)!;
-			if (self.peek().type != TYPE_IDENT)
-			{
-				self.report_error("type: expected a 'TYPE_IDENT' token");
-				return INVALID_AST?;
-			}
+			if (self.peek().type != TYPE_IDENT) return INVALID_TYPE?;
 			list.push(self.advance()!);
 	}
 
@@ -823,22 +826,7 @@ fn AstNode*? YadgParser.func_definition(&self)
 	self.opt_attributes(&node.func_definition.opt_attributes)!;
 
 	// Handle 'macro_func_body'
-	switch (self.peek().type)
-	{
-		case SEMICOLON: // func_definition_decl
-		case BRACE:     // Regular func/macro body
-			self.advance()!;
-		case IMPLIES:
-			while (self.peek().type != EOF && self.peek().type != SEMICOLON)
-			{
-				self.advance()!;
-			}
-		case EOF:
-			break;
-		default:
-			self.report_error("func_definition: expected a macro/func body");
-			return INVALID_AST?;
-	}
+	self.macro_func_body()!;
 
 	return node;
 }
@@ -879,3 +867,128 @@ fn AstNode*? YadgParser.func_header(&self)
 
 	return node;
 }
+
+
+fn AstNode*? YadgParser.macro_declaration(&self)
+{
+	if (!self.expect(MACRO)!)
+	{
+		self.report_error("macro_declaration: expected a 'MACRO' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_MACRO_DECLARATION;
+	node.macro_declaration.opt_attributes.init(self.allocator);
+	defer catch {
+		node.macro_declaration.opt_attributes.free();
+		allocator::free(self.allocator, node);
+	}
+
+	node.macro_declaration.macro_header = self.macro_header()!;
+
+	if (self.peek().type != PAREN)
+	{
+		self.report_error("macro_declaration: expected 'macro_params' (a 'PAREN' token)");
+		return INVALID_AST?;
+	}
+	node.macro_declaration.macro_params = self.advance()!;
+
+	self.opt_attributes(&node.macro_declaration.opt_attributes)!;
+
+	// Handle 'macro_func_body'
+	self.macro_func_body()!;
+
+	return node;
+}
+
+fn void? YadgParser.macro_func_body(&self)
+{
+	switch (self.peek().type)
+	{
+		case SEMICOLON: // macro_declaration_decl
+		case BRACE:     // Regular func/macro body
+			self.advance()!;
+		case IMPLIES:
+			while (self.peek().type != EOF && self.peek().type != SEMICOLON)
+			{
+				self.advance()!;
+			}
+		case EOF:
+			break;
+		default:
+			self.report_error("macro_func_body: expected a macro/func body");
+			return INVALID_AST?;
+	}
+}
+
+<*
+ Similar to func_header but we pass a macro
+
+macro_header
+	: func_header
+	| type '.' func_macro_name
+	| func_macro_name
+	;
+
+func_header
+	: optional_type type '.' func_macro_name
+	| optional_type func_macro_name
+	;
+
+*>
+fn AstNode*? YadgParser.macro_header(&self)
+{
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_FUNC_HEADER;
+	node.func_header.optional_type.init(self.allocator);
+	node.func_header.type.init(self.allocator);
+	defer catch {
+		node.func_header.optional_type.free();
+		node.func_header.type.free();
+		allocator::free(self.allocator, node);
+	}
+
+	// We can have four cases:
+	// 	1.) trim
+	// 	2.) mod::String.trim
+	// 	3.) mod::String? trim
+	// 	4.) mod::String? mod::Struct.trim
+
+	if (catch self.optional_type(&node.func_header.optional_type))
+	{
+		assert (node.func_header.optional_type.len() == 1);
+		node.func_header.func_macro_name = node.func_header.optional_type[0];
+		node.func_header.optional_type.clear();
+		return node; // Case 1
+	}
+
+	if (self.expect(DOT)!)
+	{
+		node.func_header.func_macro_name = self.advance()!;
+		node.func_header.type.add_all(&node.func_header.optional_type);
+		node.func_header.optional_type.clear();
+		return node; // Case 2
+	}
+
+	if (catch self.type(&node.func_header.type, true, true))
+	{
+		assert (node.func_header.type.len() == 1);
+		node.func_header.func_macro_name = node.func_header.type[0];
+		node.func_header.type.clear();
+		return node; // Case 3
+	}
+
+	if (self.expect(DOT)!)
+	{
+		node.func_header.func_macro_name = self.advance()!;
+	}
+	else
+	{
+		self.report_error("exepected 'DOT'?");
+		return INVALID_AST?;
+	}
+
+	return node; // Case 4
+}
+

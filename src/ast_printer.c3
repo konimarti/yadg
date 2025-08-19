@@ -109,9 +109,17 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			foreach (attr : node.func_definition.opt_attributes) n += self.visit(attr)!;
 
 		case AST_FUNC_HEADER:
+			n += write_string(f, prefix, "return_type:")!;
 			n += write_token_list(f, prefix, node.func_header.optional_type)!;
+			n += write_string(f, prefix, "method_receiver:")!;
 			n += write_token_list(f, prefix, node.func_header.type)!;
+			n += write_string(f, prefix, "func_macro_name:")!;
 			n += write_token(f, prefix, node.func_header.func_macro_name)!;
+
+		case AST_MACRO_DECLARATION:
+			n += self.visit(node.macro_declaration.macro_header)!;
+			n += write_token(f, prefix, node.macro_declaration.macro_params)!;
+			foreach (attr : node.macro_declaration.opt_attributes) n += self.visit(attr)!;
 
 		case AST_INLINE:
 		case AST_EXTERN:
