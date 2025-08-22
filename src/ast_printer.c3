@@ -121,6 +121,13 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.macro_declaration.macro_params)!;
 			foreach (attr : node.macro_declaration.opt_attributes) n += self.visit(attr)!;
 
+		case AST_DISTINCT_DECLARATION:
+			n += write_token(f, prefix, node.distinct_declaration.type_ident)!;
+			n += write_token(f, prefix, node.distinct_declaration.opt_interface_impl)!;
+			foreach (attr : node.distinct_declaration.opt_attributes) n += self.visit(attr)!;
+			if (node.distinct_declaration.opt_inline) n += write_string(f, prefix, "INLINE")!;
+			n += write_token_list(f, prefix, node.distinct_declaration.type)!;
+
 		case AST_INLINE:
 		case AST_EXTERN:
 			n += self.visit(node.child)!;

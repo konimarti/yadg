@@ -166,19 +166,27 @@ fn void test_macro() @test
 	run_parser(input)!!;
 }
 
-//
-// fn void test_typedef() @test
-// {
-// 	String input = `
-// 	module foo::bar @if(!env::LINUX);
-// 	<* typedef comment 1 *>
-// 	typedef Char16** = uint[<3>];
-// 	<* typedef comment 1 *>
-// 	typedef WString = inline Char16*;
-// 	`;
-// 	run_parser(input)!!;
-// 	assert(false);
-// }
+fn void test_typedef() @test
+{
+	String input = `
+	module foo::bar @if(!env::LINUX);
+	<* typedef comment 1 *>
+	typedef Char16 = uint[<3>];
+	<* typedef comment 1 *>
+	typedef WString = inline Char16*;
+		typedef PriorityQueue = inline PrivatePriorityQueue{Type, false};
+		typedef PriorityQueueMax = inline PrivatePriorityQueue{Type, true};
+		typedef ObjcSelector = void*;
+		typedef Pthread_mutex_t = ulong[8];
+		typedef Win32_CRITICAL_SECTION = ulong[5];
+		typedef Win32_CONDITION_VARIABLE = void*;
+		typedef String @if(!$defined(String)) = inline char[];
+		typedef NanoDuration (Printable) @structlike = long;
+		typedef Sfc128Random (Random) = uint128[4];
+	`;
+	run_parser(input)!!;
+}
+
 // fn void test_alias() @test
 // {
 // 	String input = `

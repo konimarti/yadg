@@ -26,6 +26,7 @@ enum AstType
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
 	AST_MACRO_DECLARATION,
+	AST_DISTINCT_DECLARATION,
 }
 
 alias AstList = List{ AstNode* };
@@ -103,6 +104,14 @@ struct AstNode (Printable)
 			Token     type_ident;
 			TokenList interface_parents;
 		}
+		struct distinct_declaration
+		{
+			Token     type_ident;
+			Token     opt_interface_impl; // paren
+			AstList   opt_attributes;
+			bool      opt_inline;
+			TokenList type;
+		}
 		struct func_definition
 		{
 			AstNode* func_header;
@@ -172,6 +181,7 @@ fn AstNode*? YadgParser.top_level(&self)
 			case INTERFACE: tl = self.interface_declaration()!;
 			case FUNC:      tl = self.func_definition()!;
 			case MACRO:     tl = self.macro_declaration()!;
+			case TYPEDEF:   tl = self.distinct_declaration()!;
 			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
 			// case TYPEDEF:  node.top_level.decl = self.alias_stmt()!;
 			// case CONST:
@@ -992,3 +1002,53 @@ fn AstNode*? YadgParser.macro_header(&self)
 	return node; // Case 4
 }
 
+<*
+distinct_declaration
+	: TYPEDEF TYPE_IDENT opt_interface_impl opt_attributes '=' opt_inline type ';'
+	;
+*>
+fn AstNode*? YadgParser.distinct_declaration(&self)
+{
+	if (!self.expect(TYPEDEF)!)
+	{
+		self.report_error("distinct_declaration: expected a 'TYPEDEF' token");
+		return INVALID_AST?;
+	}
+
+	if (self.peek().type != TYPE_IDENT)
+	{
+		self.report_error("distinct_declaration: expected a 'TYPE_IDENT' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_DISTINCT_DECLARATION;
+	node.distinct_declaration.opt_attributes.init(self.allocator);
+	node.distinct_declaration.type.init(self.allocator);
+	defer catch {
+		node.distinct_declaration.opt_attributes.free();
+		node.distinct_declaration.type.free();
+		allocator::free(self.allocator, node);
+	}
+
+	node.distinct_declaration.type_ident = self.advance()!;
+
+	if (self.peek().type == PAREN)
+	{
+		node.distinct_declaration.opt_interface_impl = self.advance()!;
+	}
+
+	self.opt_attributes(&node.distinct_declaration.opt_attributes)!;
+
+	if (!self.expect(ASSIGN)!)
+	{
+		self.report_error("distinct_declaration: expected a 'ASSIGN' token");
+		return INVALID_AST?;
+	}
+
+	node.distinct_declaration.opt_inline = self.expect(INLINE)!;
+
+	self.type(&node.distinct_declaration.type, true, true)!;
+
+	return node;
+}
