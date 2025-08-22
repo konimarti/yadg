@@ -843,29 +843,31 @@ fn AstNode*? YadgParser.func_header(&self)
 		node.func_header.type.free();
 		allocator::free(self.allocator, node);
 	}
+
+	// We can have two cases:
+	// 	1.) mod::String? trim
+	// 	2.) mod::String? mod::Struct.trim
+
 	self.optional_type(&node.func_header.optional_type)!;
 
-	if (self.peek().type == IDENT || self.peek().type == AT_IDENT)
+	if (catch self.type(&node.func_header.type, true, true))
 	{
-		node.func_header.func_macro_name = self.advance()!;
-		if (self.expect(SCOPE)!)
-		{
-			// Oops. We read a 'path'
-			node.func_header.type.push(node.func_header.func_macro_name);
-			self.type(&node.func_header.type, true, true)!;
-		}
-	}
-	else
-	{
-		self.type(&node.func_header.type, true, true)!;
+		assert (node.func_header.type.len() == 1);
+		node.func_header.func_macro_name = node.func_header.type.pop()!!;
+		return node; // Case 1
 	}
 
 	if (self.expect(DOT)!)
 	{
 		node.func_header.func_macro_name = self.advance()!;
 	}
+	else
+	{
+		self.report_error("exepected 'DOT' token?");
+		return INVALID_AST?;
+	}
 
-	return node;
+	return node; // Case 2
 }
 
 
@@ -958,8 +960,7 @@ fn AstNode*? YadgParser.macro_header(&self)
 	if (catch self.optional_type(&node.func_header.optional_type))
 	{
 		assert (node.func_header.optional_type.len() == 1);
-		node.func_header.func_macro_name = node.func_header.optional_type[0];
-		node.func_header.optional_type.clear();
+		node.func_header.func_macro_name = node.func_header.optional_type.pop()!;
 		return node; // Case 1
 	}
 
@@ -974,8 +975,7 @@ fn AstNode*? YadgParser.macro_header(&self)
 	if (catch self.type(&node.func_header.type, true, true))
 	{
 		assert (node.func_header.type.len() == 1);
-		node.func_header.func_macro_name = node.func_header.type[0];
-		node.func_header.type.clear();
+		node.func_header.func_macro_name = node.func_header.type.pop()!;
 		return node; // Case 3
 	}
 
@@ -985,7 +985,7 @@ fn AstNode*? YadgParser.macro_header(&self)
 	}
 	else
 	{
-		self.report_error("exepected 'DOT'?");
+		self.report_error("exepected 'DOT' token?");
 		return INVALID_AST?;
 	}
 
