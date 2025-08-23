@@ -30,6 +30,7 @@ enum AstType
 
 	AST_TYPE, // TokenList list
 	AST_PATH, // TokenList list
+	AST_OPT_ATTRIBUTES, // AstList alist
 }
 
 alias AstList = List{ AstNode* };
@@ -53,7 +54,7 @@ struct AstNode (Printable)
 		{
 			AstNode*  path_ident;
 			Token     module_params;
-			AstList   opt_attributes;
+			AstNode*  opt_attributes;
 		}
 		struct _attribute
 		{
@@ -66,22 +67,22 @@ struct AstNode (Printable)
 		}
 		struct faults
 		{
-			Token   const_ident;
-			AstList opt_attributes;
+			Token    const_ident;
+			AstNode* opt_attributes;
 		}
 		struct struct_declaration
 		{
-			Token   type_ident;
-			Token   opt_interface_impl; // paren
-			AstList opt_attributes;
-			Token   struct_body; // brace
+			Token    type_ident;
+			Token    opt_interface_impl; // paren
+			AstNode* opt_attributes;
+			Token    struct_body; // brace
 		}
 		struct enum_declaration
 		{
 			Token    type_ident;
 			Token    opt_interface_impl; // paren
 			AstNode* enum_spec;
-			AstList  opt_attributes;
+			AstNode* opt_attributes;
 			Token    enum_list; // brace
 		}
 		struct enum_spec
@@ -94,7 +95,7 @@ struct AstNode (Printable)
 			Token    type_ident;
 			Token    opt_interface_impl; // paren
 			AstNode* type_no_generics; // base_type_no_generics / type_no_generics type_suffix
-			AstList  opt_attributes;
+			AstNode* opt_attributes;
 			Token    bitstruct_body; // brace
 		}
 		struct interface_declaration
@@ -111,7 +112,7 @@ struct AstNode (Printable)
 		{
 			Token    type_ident;
 			Token    opt_interface_impl; // paren
-			AstList  opt_attributes;
+			AstNode* opt_attributes;
 			bool     opt_inline;
 			AstNode* type;
 		}
@@ -119,7 +120,7 @@ struct AstNode (Printable)
 		{
 			AstNode* func_header;
 			Token    fn_parameter_list; // paren
-			AstList  opt_attributes;
+			AstNode* opt_attributes;
 		}
 		struct func_header
 		{
@@ -131,10 +132,11 @@ struct AstNode (Printable)
 		{
 			AstNode* macro_header;
 			Token    macro_params; // paren
-			AstList  opt_attributes;
+			AstNode* opt_attributes;
 		}
-		AstNode* child; // inline, extern
-		TokenList list; // type, optional_type
+		AstNode*  child; // inline, extern
+		TokenList list;  // type, optional_type
+		AstList   alist; // opt_attributes
 	}
 }
 
@@ -249,7 +251,6 @@ fn AstNode*? YadgParser._module(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_MODULE;
-	node._module.opt_attributes.init(self.allocator);
 
 	// path_ident
 	node._module.path_ident = self.path_ident()!;
@@ -259,7 +260,7 @@ fn AstNode*? YadgParser._module(&self)
 		node._module.module_params = self.advance()!;
 	}
 
-	self.opt_attributes(&node._module.opt_attributes)!;
+	node._module.opt_attributes = self.opt_attributes()!;
 
 	if (!self.expect(SEMICOLON)!)
 	{
@@ -276,7 +277,7 @@ path
 	| path IDENT SCOPE
 	;
 *>
-fn AstNode*? YadgParser.path(&self)
+fn AstNode*? YadgParser.path(&self, TokenType path_type = IDENT)
 {
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_PATH;
@@ -287,7 +288,7 @@ fn AstNode*? YadgParser.path(&self)
 	}
 
 	// path_ident
-	while (self.peek().type != EOF && self.peek().type == IDENT)
+	while (self.peek().type != EOF && self.peek().type == path_type)
 	{
 		node.list.push(self.advance()!);
 		if (self.expect(SCOPE)!) continue;
@@ -302,13 +303,40 @@ path_ident
 	| IDENT
 	;
 *>
-fn AstNode*? YadgParser.path_ident(&self) => self.path();
+fn AstNode*? YadgParser.path_ident(&self) => self.path(IDENT);
 
-// opt_attributes
-fn void? YadgParser.opt_attributes(&self, AstList *list)
+<*
+opt_attributes
+	: attribute_list
+	| empty
+	;
+
+attribute_list
+	: attribute
+	| attribute_list attribute
+	;
+
+attribute
+	: attribute_name
+	| attribute_name '(' attribute_param_list ')'
+	;
+
+*>
+fn AstNode*? YadgParser.opt_attributes(&self)
 {
+	AstNode* node = allocator::new(self.allocator, AstNode);
+	node.type = AST_OPT_ATTRIBUTES;
+	node.alist.init(self.allocator);
+
+	defer catch {
+		node.alist.free();
+		allocator::free(self.allocator, node);
+	};
+
 	AstNode *ptr;
-	while ((ptr = self._attribute()!) && ptr) list.push(ptr);
+	while ((ptr = self._attribute()!) && ptr) node.alist.push(ptr);
+
+	return node;
 }
 
 <*
@@ -380,17 +408,12 @@ fn AstNode*? YadgParser.faults(&self)
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_FAULTS;
 	node.faults.const_ident = self.advance()!;
-	node.faults.opt_attributes.init(self.allocator);
 	defer catch {
 		node.faults.opt_attributes.free();
 		allocator::free(self.allocator, node);
 	}
 
-	(void)self.comment();
-
-	self.opt_attributes(&node.faults.opt_attributes)!;
-
-	(void)self.comment();
+	node.faults.opt_attributes = self.opt_attributes()!;
 
 	return node;
 }
@@ -411,7 +434,6 @@ fn AstNode*? YadgParser.struct_declaration(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_STRUCT_DECLARATION;
-	node.struct_declaration.opt_attributes.init(self.allocator);
 	defer catch {
 		node.struct_declaration.opt_attributes.free();
 		allocator::free(self.allocator, node);
@@ -424,7 +446,7 @@ fn AstNode*? YadgParser.struct_declaration(&self)
 		node.struct_declaration.opt_interface_impl = self.advance()!;
 	}
 
-	self.opt_attributes(&node.struct_declaration.opt_attributes)!;
+	node.struct_declaration.opt_attributes = self.opt_attributes()!;
 
 	if (self.peek().type != BRACE)
 	{
@@ -458,7 +480,6 @@ fn AstNode*? YadgParser.enum_declaration(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_ENUM_DECLARATION;
-	node.enum_declaration.opt_attributes.init(self.allocator);
 	defer catch {
 		node.enum_declaration.opt_attributes.free();
 		allocator::free(self.allocator, node);
@@ -479,7 +500,7 @@ fn AstNode*? YadgParser.enum_declaration(&self)
 		node.enum_declaration.enum_spec = self.enum_spec()!;
 	}
 
-	self.opt_attributes(&node.enum_declaration.opt_attributes)!;
+	node.enum_declaration.opt_attributes = self.opt_attributes()!;
 
 	if (self.peek().type != BRACE)
 	{
@@ -623,7 +644,6 @@ fn AstNode*? YadgParser.bitstruct_declaration(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_BITSTRUCT_DECLARATION;
-	node.bitstruct_declaration.opt_attributes.init(self.allocator);
 	defer catch {
 		node.bitstruct_declaration.type_no_generics.free();
 		node.bitstruct_declaration.opt_attributes.free();
@@ -648,7 +668,7 @@ fn AstNode*? YadgParser.bitstruct_declaration(&self)
 	// type_no_generics
 	node.bitstruct_declaration.type_no_generics = self.type()!;
 
-	self.opt_attributes(&node.bitstruct_declaration.opt_attributes)!;
+	node.bitstruct_declaration.opt_attributes = self.opt_attributes()!;
 
 	if (self.peek().type != BRACE)
 	{
@@ -864,7 +884,6 @@ fn AstNode*? YadgParser.func_definition(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_FUNC_DEFINITION;
-	node.func_definition.opt_attributes.init(self.allocator);
 	defer catch {
 		node.func_definition.opt_attributes.free();
 		allocator::free(self.allocator, node);
@@ -879,7 +898,7 @@ fn AstNode*? YadgParser.func_definition(&self)
 	}
 	node.func_definition.fn_parameter_list = self.advance()!;
 
-	self.opt_attributes(&node.func_definition.opt_attributes)!;
+	node.func_definition.opt_attributes = self.opt_attributes()!;
 
 	// Handle 'macro_func_body'
 	self.macro_func_body()!;
@@ -936,7 +955,6 @@ fn AstNode*? YadgParser.macro_declaration(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_MACRO_DECLARATION;
-	node.macro_declaration.opt_attributes.init(self.allocator);
 	defer catch {
 		node.macro_declaration.opt_attributes.free();
 		allocator::free(self.allocator, node);
@@ -951,7 +969,7 @@ fn AstNode*? YadgParser.macro_declaration(&self)
 	}
 	node.macro_declaration.macro_params = self.advance()!;
 
-	self.opt_attributes(&node.macro_declaration.opt_attributes)!;
+	node.macro_declaration.opt_attributes = self.opt_attributes()!;
 
 	// Handle 'macro_func_body'
 	self.macro_func_body()!;
@@ -1068,7 +1086,6 @@ fn AstNode*? YadgParser.distinct_declaration(&self)
 
 	AstNode* node = allocator::new(self.allocator, AstNode);
 	node.type = AST_DISTINCT_DECLARATION;
-	node.distinct_declaration.opt_attributes.init(self.allocator);
 	defer catch {
 		node.distinct_declaration.opt_attributes.free();
 		node.distinct_declaration.type.free();
@@ -1082,7 +1099,7 @@ fn AstNode*? YadgParser.distinct_declaration(&self)
 		node.distinct_declaration.opt_interface_impl = self.advance()!;
 	}
 
-	self.opt_attributes(&node.distinct_declaration.opt_attributes)!;
+	node.distinct_declaration.opt_attributes = self.opt_attributes()!;
 
 	if (!self.expect(ASSIGN)!)
 	{

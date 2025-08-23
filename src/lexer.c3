@@ -237,7 +237,6 @@ enum IdentType
 	STR_IDENT
 }
 
-// FIXME
 fn IdentType classify(String s)
 {
 	usz caps, nocaps, n;

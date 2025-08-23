@@ -59,7 +59,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_MODULE:
 			n += self.visit(node._module.path_ident)!;
 			n += write_token(f, prefix, node._module.module_params)!;
-			foreach (attr : node._module.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node._module.opt_attributes)!;
 
 		case AST_FAULT_DECLARATION:
 			foreach (top_level : node.translation_unit.top_level_stmts)
@@ -69,7 +69,10 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 		case AST_FAULTS:
 			n += write_token(f, prefix, node.faults.const_ident)!;
-			foreach (attr : node.faults.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.faults.opt_attributes)!;
+
+		case AST_OPT_ATTRIBUTES:
+			foreach (attr : node.alist) n += self.visit(attr)!;
 
 		case AST_ATTRIBUTE:
 			n += write_token(f, prefix, node._attribute.attribute_name)!;
@@ -78,14 +81,14 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_STRUCT_DECLARATION:
 			n += write_token(f, prefix, node.struct_declaration.type_ident)!;
 			n += write_token(f, prefix, node.struct_declaration.opt_interface_impl)!;
-			foreach (attr : node.struct_declaration.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.struct_declaration.opt_attributes)!;
 			n += write_token(f, prefix, node.struct_declaration.struct_body)!;
 
 		case AST_ENUM_DECLARATION:
 			n += write_token(f, prefix, node.enum_declaration.type_ident)!;
 			n += write_token(f, prefix, node.enum_declaration.opt_interface_impl)!;
 			n += self.visit(node.enum_declaration.enum_spec)!;
-			foreach (attr : node.enum_declaration.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.enum_declaration.opt_attributes)!;
 			n += write_token(f, prefix, node.enum_declaration.enum_list)!;
 
 		case AST_ENUM_SPEC:
@@ -96,7 +99,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.bitstruct_declaration.type_ident)!;
 			n += write_token(f, prefix, node.bitstruct_declaration.opt_interface_impl)!;
 			n += self.visit(node.bitstruct_declaration.type_no_generics)!;
-			foreach (attr : node.bitstruct_declaration.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.bitstruct_declaration.opt_attributes)!;
 			n += write_token(f, prefix, node.bitstruct_declaration.bitstruct_body)!;
 
 		case AST_INTERFACE_DECLARATION:
@@ -110,7 +113,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_FUNC_DEFINITION:
 			n += self.visit(node.func_definition.func_header)!;
 			n += write_token(f, prefix, node.func_definition.fn_parameter_list)!;
-			foreach (attr : node.func_definition.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.func_definition.opt_attributes)!;
 
 		case AST_FUNC_HEADER:
 			n += self.visit(node.func_header.optional_type)!;
@@ -120,12 +123,12 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_MACRO_DECLARATION:
 			n += self.visit(node.macro_declaration.macro_header)!;
 			n += write_token(f, prefix, node.macro_declaration.macro_params)!;
-			foreach (attr : node.macro_declaration.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.macro_declaration.opt_attributes)!;
 
 		case AST_DISTINCT_DECLARATION:
 			n += write_token(f, prefix, node.distinct_declaration.type_ident)!;
 			n += write_token(f, prefix, node.distinct_declaration.opt_interface_impl)!;
-			foreach (attr : node.distinct_declaration.opt_attributes) n += self.visit(attr)!;
+			n += self.visit(node.distinct_declaration.opt_attributes)!;
 			if (node.distinct_declaration.opt_inline) n += write_string(f, prefix, "INLINE")!;
 			n += self.visit(node.distinct_declaration.type)!;
 
