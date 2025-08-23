@@ -52,8 +52,12 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.top_level.comment)!;
 			n += self.visit(node.top_level.decl)!;
 
+		case AST_TYPE:
+		case AST_PATH:
+			n += write_token_list(f, prefix, node.list)!;
+
 		case AST_MODULE:
-			n += write_token_list(f, prefix, node._module.path_ident)!;
+			n += self.visit(node._module.path_ident)!;
 			n += write_token(f, prefix, node._module.module_params)!;
 			foreach (attr : node._module.opt_attributes) n += self.visit(attr)!;
 
@@ -85,13 +89,13 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.enum_declaration.enum_list)!;
 
 		case AST_ENUM_SPEC:
-			n += write_token_list(f, prefix, node.enum_spec.base_type_no_generics)!;
+			n += self.visit(node.enum_spec.base_type_no_generics)!;
 			n += write_token(f, prefix, node.enum_spec.enum_params)!;
 
 		case AST_BITSTRUCT_DECLARATION:
 			n += write_token(f, prefix, node.bitstruct_declaration.type_ident)!;
 			n += write_token(f, prefix, node.bitstruct_declaration.opt_interface_impl)!;
-			n += write_token_list(f, prefix, node.bitstruct_declaration.type_no_generics)!;
+			n += self.visit(node.bitstruct_declaration.type_no_generics)!;
 			foreach (attr : node.bitstruct_declaration.opt_attributes) n += self.visit(attr)!;
 			n += write_token(f, prefix, node.bitstruct_declaration.bitstruct_body)!;
 
@@ -109,11 +113,8 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			foreach (attr : node.func_definition.opt_attributes) n += self.visit(attr)!;
 
 		case AST_FUNC_HEADER:
-			n += write_string(f, prefix, "return_type:")!;
-			n += write_token_list(f, prefix, node.func_header.optional_type)!;
-			n += write_string(f, prefix, "method_receiver:")!;
-			n += write_token_list(f, prefix, node.func_header.type)!;
-			n += write_string(f, prefix, "func_macro_name:")!;
+			n += self.visit(node.func_header.optional_type)!;
+			n += self.visit(node.func_header.type)!;
 			n += write_token(f, prefix, node.func_header.func_macro_name)!;
 
 		case AST_MACRO_DECLARATION:
@@ -126,7 +127,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.distinct_declaration.opt_interface_impl)!;
 			foreach (attr : node.distinct_declaration.opt_attributes) n += self.visit(attr)!;
 			if (node.distinct_declaration.opt_inline) n += write_string(f, prefix, "INLINE")!;
-			n += write_token_list(f, prefix, node.distinct_declaration.type)!;
+			n += self.visit(node.distinct_declaration.type)!;
 
 		case AST_INLINE:
 		case AST_EXTERN:

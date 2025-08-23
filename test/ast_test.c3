@@ -140,6 +140,9 @@ fn void test_func_definition() @test
 	}
 
 	fn int? String.fn_add(int a, int b) @local {}
+
+	fn int sendBreak(Fd fd, int duration) @deprecated => send_break(fd, duration);
+
 	`;
 	run_parser(input)!!;
 }
@@ -158,11 +161,22 @@ fn void test_macro() @test
 	<* macro with return type *>
 	macro int fn_add_2(#a, #b) => $stringify(#a, #b);
 
-	macro int? String.add(#a, #b) {}
-	macro int String.add(#a, #b) {}
-	macro String.add(#a, #b) {} // ERROR
+	// 1.) trim
 	macro add(#a, #b) {}
+
+	// 2.) mod::String.trim
+	macro String.add(#a, #b) {} // ERROR
+
+	// 3.) mod::String? trim
+	macro String? add(#a, #b) {}
+
+	// 4.) mod::String? mod::Struct.trim
+	macro int? String.add(#a, #b) {}
+
+	macro @ceil($input) @const => $$ceil($input);
+
 	`;
+
 	run_parser(input)!!;
 }
 

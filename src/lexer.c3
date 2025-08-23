@@ -237,6 +237,7 @@ enum IdentType
 	STR_IDENT
 }
 
+// FIXME
 fn IdentType classify(String s)
 {
 	usz caps, nocaps, n;
@@ -246,7 +247,7 @@ fn IdentType classify(String s)
 		switch
 		{
 			case c >= 'a' && c <= 'z': nocaps++;
-			case c >= 'A' && c <= 'Z': caps++;
+			case c >= 'A' && c <= 'Z': if (!nocaps) caps++;
 			case c == '_' || c == '$' || c == '#': n--;
 		}
 	}
@@ -748,6 +749,7 @@ fn void test_classify_str() @test
 	assert(classify("AABB") == STR_CONST);
 	assert(classify("Aabb") == STR_TYPE);
 	assert(classify("aabb") == STR_IDENT);
+	assert(classify("aaBb") == STR_IDENT);
 }
 
 

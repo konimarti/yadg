@@ -7,7 +7,7 @@ import std::io;
 struct YadgParser
 {
 	Lexer        lexer;
-	Token        next_token;
+	TokenList    tokens;
 	Token        last_comment;
 	OutStream    output;
 	String       path_prefix;
@@ -21,6 +21,7 @@ fn YadgParser* YadgParser.init(&self, Allocator allocator, OutStream output, Str
 		.path_prefix = prefix,
 		.allocator   = allocator
 	};
+	self.tokens.init(self.allocator);
 	return self;
 }
 
@@ -28,6 +29,7 @@ fn void YadgParser.free(&self)
 {
 	if (!self.allocator) return;
 	self.last_comment.free();
+	self.tokens.free();
 	*self = {};
 }
 
@@ -41,14 +43,11 @@ fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
 	// be freed by the caller.
 	self.lexer.init(self.allocator, file);
 
-	// Set next_token
-	self.next_token = self.lexer.next()!;
-
 	AstNode *doc = self.translation_unit()!;
 
 	// Release unused resources
 	self.last_comment = {};
-	self.next_token = {};
+	self.lexer.free();
 
 	return doc;
 }
@@ -65,7 +64,7 @@ fn Token? YadgParser.find_comment(&self)
 fn void YadgParser.report_error(&self, String err_msg)
 {
 	io::eprintfn("PARSER ERROR at Ln: %d, Col: %d -- %s [next token: %s]",
-		self.lexer.ln, self.lexer.col, err_msg, self.next_token);
+		self.lexer.ln, self.lexer.col, err_msg, self.tokens.first() ?? (Token){});
 }
 
 // Synchroinze discards token until the next semicolon or {..} block
@@ -90,15 +89,27 @@ fn void? YadgParser.synchronize(&self)
 }
 
 // Return next token that will be consumed next.
-fn Token YadgParser.peek(&self) => self.next_token;
+fn Token YadgParser.peek(&self)
+{
+	if (self.tokens.len() == 0)
+	{
+		if (try tok = self.lexer.next())
+		{
+			self.tokens.push(tok);
+		}
+		else
+		{
+			return (Token){};
+		}
+	}
+	return self.tokens.first()!!;
+}
 
 // Consume current token and return it.
 fn Token? YadgParser.advance(&self)
 {
-	Token consumed = self.next_token;
-	io::printfn("Token consumed: %s", consumed);
-	self.next_token = self.lexer.next()!;
-	return consumed;
+	if (self.tokens.len()) return self.tokens.pop_first();
+	return self.lexer.next()!;
 }
 
 // If next token is tok, then advance and return true; otherwise, return false.
@@ -112,4 +123,5 @@ fn bool? YadgParser.expect(&self, TokenType type)
 	return false;
 }
 
+fn void YadgParser.push_back(&self, Token tok) => self.tokens.push_front(tok);
 
