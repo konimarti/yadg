@@ -160,7 +160,7 @@ fn usz? Token.to_format(&self, Formatter *f) @dynamic
 fn void Token.free(&self)
 {
 	if (!self.allocator) return;
-	if (self.text.len) self.text.free(self.allocator);
+	self.text.free(self.allocator);
 	*self = {};
 }
 
@@ -296,7 +296,7 @@ fn Token Lexer.emit_token(&self, TokenType type, String text = "")
 		.type  = type,
 		.text  = text,
 		.range = self.pos() - self.token_start,
-		.allocator = self.allocator
+		.allocator = text.len ? self.allocator : null
 	};
 	return tok;
 }
@@ -434,8 +434,18 @@ fn Token? Lexer._next(&self) @private => @pool()
 			self.advance()!; // consume '/'
 			switch (self.peek()!)
 			{
-				case '/': self.advance()!; self.scan_line_comment()!; return self._next();
-				case '*': self.advance()!; self.scan_block_comment()!; return self._next();;
+				case '/':
+					self.advance()!;
+					@pool() {
+						self.scan_line_comment(tmem)!;
+					};
+					return self._next();
+				case '*':
+					self.advance()!;
+					@pool() {
+						self.scan_block_comment(tmem)!;
+					};
+					return self._next();;
 				default: return self.emit_token(DIV);
 			}
 
@@ -463,7 +473,7 @@ fn void? Lexer.scan_whitespace(&self)
  @require open.len > 0
  @require close.len > 0
 *>
-fn String? Lexer.scan_surround(&self, int depth, String open, String close) => @pool()
+fn String? Lexer.scan_surround(&self, int depth, String open, String close, Allocator allocator) => @pool()
 {
 	DString buf = dstring::temp();
 
@@ -479,10 +489,10 @@ fn String? Lexer.scan_surround(&self, int depth, String open, String close) => @
 				{
 					case '/':
 						buf.append_char(self.advance()!); // Consume '/'
-						buf.append_chars(self.scan_line_comment()!);
+						buf.append_chars(self.scan_line_comment(tmem)!);
 					case '*':
 						buf.append_char(self.advance()!); // Consume '*'
-						buf.append_chars(self.scan_block_comment()!);
+						buf.append_chars(self.scan_block_comment(tmem)!);
 						buf.append_chars("*/");
 				}
 				continue;
@@ -490,9 +500,7 @@ fn String? Lexer.scan_surround(&self, int depth, String open, String close) => @
 			case '"' :
 			case '`':
 			case '\'':
-				String str = self.scan_string()!;
-				buf.append_chars(str);
-				str.free(self.allocator);
+				buf.append_chars(self.scan_string(tmem)!);
 				continue;
 			case open[0]:
 				for (i = 0; i < open.len && self.peek()! == open[i]; i++)
@@ -518,10 +526,10 @@ fn String? Lexer.scan_surround(&self, int depth, String open, String close) => @
 		buf.append_char(self.advance()!);
 	}
 
-	return buf.str_view().copy(self.allocator);
+	return buf.str_view().copy(allocator);
 }
 
-fn String? Lexer.scan_string(&self)
+fn String? Lexer.scan_string(&self, Allocator allocator)
 {
 	DString buf = dstring::temp();
 
@@ -547,13 +555,13 @@ fn String? Lexer.scan_string(&self)
 			buf.append_char(self.advance()!); // Consume '`' or '\''
 	}
 
-	return buf.str_view().copy(self.allocator);
+	return buf.str_view().copy(allocator);
 }
 
-fn Token? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string()!);
-fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}")!);
-fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")")!);
-fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]")!);
+fn Token? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string(self.allocator)!);
+fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}", self.allocator)!);
+fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")", self.allocator)!);
+fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]", self.allocator)!);
 
 fn Token? Lexer.lex_comment(&self)
 {
@@ -561,21 +569,21 @@ fn Token? Lexer.lex_comment(&self)
 
 	switch (self.peek()!)
 	{
-		case '/': self.advance()!; return self.emit_token(LCOMMENT, self.scan_line_comment()!);
-		case '*': self.advance()!; return self.emit_token(BCOMMENT, self.scan_block_comment()!);
+		case '/': self.advance()!; return self.emit_token(LCOMMENT, self.scan_line_comment(self.allocator)!);
+		case '*': self.advance()!; return self.emit_token(BCOMMENT, self.scan_block_comment(self.allocator)!);
 		default: return self.emit_token(DIV);
 	}
 }
 
-fn String? Lexer.scan_line_comment(&self) => @pool()
+fn String? Lexer.scan_line_comment(&self, Allocator allocator) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
 	while ((c = self.peek()!) && (c != '\n' && c != '\r')) text.append_char(self.advance()!);
-	return text.str_view().copy(self.allocator);
+	return text.str_view().copy(allocator);
 }
 
-fn String? Lexer.scan_block_comment(&self) => self.scan_surround(1, "/*", "*/")!;
+fn String? Lexer.scan_block_comment(&self, Allocator allocator) => self.scan_surround(1, "/*", "*/", allocator)!;
 
 fn Token? Lexer.lex_contract(&self)
 {

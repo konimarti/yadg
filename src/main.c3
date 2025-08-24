@@ -145,8 +145,8 @@ fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 		defer (void)f.close();
 
 		io::printfn("-- scanning file: %s", path.str_view());
-		// if (try scan_tokens(&f))
-		if (try parse_file(&f))
+		if (try scan_tokens(&f))
+		// if (try parse_file(&f))
 		{
 			report.pass++;
 		}
@@ -158,18 +158,22 @@ fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 	return false; // false means continue the walk.
 }
 
-fn void? scan_tokens(InStream input) => @pool()
+fn void? scan_tokens(InStream input) => @assert_leak(true)
 {
 	Lexer lexer;
-	lexer.init(tmem, input);
+	lexer.init(mem, input);
 
-	Token tok;
-	while (true)
+	while SCAN_TOKENS: (try tok = lexer.next())
 	{
-		tok = lexer.next()!;
 		io::printn(tok);
-		if (tok.type == EOF) break;
+		if (tok.type == EOF)
+		{
+			tok.free();
+			break SCAN_TOKENS;
+		}
+		tok.free();
 	}
+	lexer.free();
 }
 
 fn void? parse_file(InStream input) => @pool()
