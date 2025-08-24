@@ -3,7 +3,7 @@ import std::io;
 
 import yadg::lexer;
 
-fn int main(String[] args)
+fn int main(String[] args) => @assert_leak(true)
 {
 	String file = `
 	// This is the app module
@@ -86,12 +86,11 @@ fn int main(String[] args)
 			case "-p":
 			case "--path":
 				if (args.len != 3) io::printn("Usage: ./yadg -p <path>");
-				@pool()
-				{
-					YadgLexerReport report;
-					path::temp(args[2])!!.walk(&yadg_update_report, &report)!!;
-					io::printn(report);
-				};
+				YadgLexerReport report;
+				Path p = path::new(mem, args[2])!!;
+				p.walk(&yadg_update_report, &report)!!;
+				p.free();
+				io::printn(report);
 			default:
 				scan_tokens(input)!!;
 		}
@@ -145,8 +144,8 @@ fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 		defer (void)f.close();
 
 		io::printfn("-- scanning file: %s", path.str_view());
-		if (try scan_tokens(&f))
-		// if (try parse_file(&f))
+		// if (try scan_tokens(&f))
+		if (try parse_file(&f))
 		{
 			report.pass++;
 		}
@@ -176,12 +175,13 @@ fn void? scan_tokens(InStream input) => @assert_leak(true)
 	lexer.free();
 }
 
-fn void? parse_file(InStream input) => @pool()
+fn void? parse_file(InStream input)
 {
-	YadgParser *parser = (YadgParser){}.init(tmem);
-	AstNode* document = parser.parse(input)!;
-	// io::printn(document);
+	YadgParser *parser = (YadgParser){}.init(mem, input);
+	AstNode* document = parser.parse()!;
 	AstPrinter printer;
 	printer.init();
 	printer.visit(document)!;
+	document.free();
+	parser.free();
 }

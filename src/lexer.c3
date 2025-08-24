@@ -189,6 +189,7 @@ struct LexerPosition
 fn LexerRange LexerPosition.sub(&self, LexerPosition start) @operator(-) => { start, *self };
 
 alias CharList = List { char };
+alias TokenPtrList = List{ Token* };
 
 struct Lexer
 {
@@ -200,6 +201,7 @@ struct Lexer
 	LexerPosition token_start;
 
 	CharList buf;
+	TokenPtrList emitted;
 }
 
 fn LexerPosition Lexer.pos(&self) => { self.ln, self.col };
@@ -209,6 +211,7 @@ fn Lexer* Lexer.init(&self, Allocator allocator, InStream input)
 	*self = { .allocator = allocator, .f = input,
 		.ln = 1, .col = 1, .eof = false };
 	self.buf.init(allocator);
+	self.emitted.init(allocator);
 	return self;
 }
 
@@ -216,6 +219,8 @@ fn void Lexer.free(&self)
 {
 	if (!self.allocator) return;
 	self.buf.free();
+	foreach (emit : self.emitted) if (emit) allocator::free(self.allocator, emit);
+	self.emitted.free();
 	*self = {};
 }
 
@@ -290,23 +295,23 @@ fn void Lexer.pushback(&self, char c) => self.buf.push_front(c);
 <*
  Emit token from lexer.
 *>
-fn Token Lexer.emit_token(&self, TokenType type, String text = "")
+fn Token* Lexer.emit_token(&self, TokenType type, String text = "")
 {
-	Token tok = {
-		.type  = type,
-		.text  = text,
-		.range = self.pos() - self.token_start,
-		.allocator = text.len ? self.allocator : null
-	};
+	Token* tok = allocator::new(self.allocator, Token);
+	tok.type  = type;
+	tok.text  = text;
+	tok.range = self.pos() - self.token_start;
+	tok.allocator = text.len ? self.allocator : null;
+	self.emitted.push(tok);
 	return tok;
 }
 
 <*
  Lex the next token.
 *>
-fn Token? Lexer.next(&self)
+fn Token*? Lexer.next(&self)
 {
-	Token? tok = self._next();
+	Token*? tok = self._next();
 	if (catch err = tok)
 	{
 		if (err == io::EOF)
@@ -319,7 +324,7 @@ fn Token? Lexer.next(&self)
 	return tok;
 }
 
-fn Token? Lexer._next(&self) @private => @pool()
+fn Token*? Lexer._next(&self) @private => @pool()
 {
 	if (self.eof) return self.emit_token(EOF);
 
@@ -558,12 +563,12 @@ fn String? Lexer.scan_string(&self, Allocator allocator)
 	return buf.str_view().copy(allocator);
 }
 
-fn Token? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string(self.allocator)!);
-fn Token? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}", self.allocator)!);
-fn Token? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")", self.allocator)!);
-fn Token? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]", self.allocator)!);
+fn Token*? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string(self.allocator)!);
+fn Token*? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}", self.allocator)!);
+fn Token*? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")", self.allocator)!);
+fn Token*? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]", self.allocator)!);
 
-fn Token? Lexer.lex_comment(&self)
+fn Token*? Lexer.lex_comment(&self)
 {
 	self.advance()!; // consume '/'
 
@@ -585,7 +590,7 @@ fn String? Lexer.scan_line_comment(&self, Allocator allocator) => @pool()
 
 fn String? Lexer.scan_block_comment(&self, Allocator allocator) => self.scan_surround(1, "/*", "*/", allocator)!;
 
-fn Token? Lexer.lex_contract(&self)
+fn Token*? Lexer.lex_contract(&self)
 {
 	char c;
 	DString text = dstring::temp();
@@ -627,7 +632,7 @@ fn Token? Lexer.lex_contract(&self)
 	return self.emit_token(CONTRACT, text.str_view().copy(self.allocator));
 }
 
-fn Token? Lexer.lex_attribute(&self) => @pool()
+fn Token*? Lexer.lex_attribute(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
@@ -648,7 +653,7 @@ fn Token? Lexer.lex_attribute(&self) => @pool()
 	return self.emit_token(type, str);
 }
 
-fn Token? Lexer.lex_number(&self) => @pool()
+fn Token*? Lexer.lex_number(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
@@ -667,7 +672,7 @@ fn Token? Lexer.lex_number(&self) => @pool()
 	return self.emit_token(NUMBER, str);
 }
 
-fn Token? Lexer.lex_ident(&self) => @pool()
+fn Token*? Lexer.lex_ident(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();
@@ -760,7 +765,7 @@ fn void test_classify_str() @test
 }
 
 
-fn Token? Lexer.lex_compile_time(&self) => @pool()
+fn Token*? Lexer.lex_compile_time(&self) => @pool()
 {
 	char c;
 	DString text = dstring::temp();

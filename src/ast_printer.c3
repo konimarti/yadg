@@ -147,9 +147,9 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	return n;
 }
 
-fn usz? write_token(Formatter *f, String prefix, Token tok) @inline @local
+fn usz? write_token(Formatter *f, String prefix, Token *tok) @inline @local
 {
-	if (tok.type == EMPTY) return 0;
+	if (!tok || tok.type == EMPTY) return 0;
 	return f.printf("%s%s\n", prefix, tok)!;
 }
 

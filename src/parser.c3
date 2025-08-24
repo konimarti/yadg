@@ -9,28 +9,40 @@ struct YadgParser
 	Lexer        lexer;
 	TokenList    consumed; // keep track of consumed tokens
 	TokenList    tokens;
-	Token        last_comment;
+	Token*       last_comment;
+	AstList      nodes;
 	Allocator    allocator;
 }
 
-fn YadgParser* YadgParser.init(&self, Allocator allocator)
+fn YadgParser* YadgParser.init(&self, Allocator allocator, InStream file)
 {
 	*self = {
 		.allocator   = allocator
 	};
+	self.lexer.init(self.allocator, file);
 	self.consumed.init(self.allocator);
 	self.tokens.init(self.allocator);
+	self.nodes.init(self.allocator);
 	return self;
 }
 
 fn void YadgParser.free(&self)
 {
 	if (!self.allocator) return;
-	self.last_comment.free();
-	foreach (tok : self.consumed) tok.free();
+
+	if (self.last_comment) self.last_comment.free();
+
+	foreach (tok : self.consumed) if (tok) tok.free();
 	self.consumed.free();
-	foreach (tok : self.tokens) tok.free();
+
+	foreach (tok : self.tokens) if (tok) tok.free();
 	self.tokens.free();
+
+	self.lexer.free();
+
+	foreach (node : self.nodes) if (node) allocator::free(self.allocator, node);
+	self.nodes.free();
+
 	*self = {};
 }
 
@@ -38,43 +50,20 @@ fn void YadgParser.free(&self)
  AstNode is allocated with the parser's allocator and must be freed by the
  caller of this function.
 *>
-fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
-{
-	// Lexer uses the same token as the parser; the returned AstNode must
-	// be freed by the caller.
-	self.lexer.init(self.allocator, file);
-
-	AstNode *doc = self.translation_unit()!;
-
-	// Release unused resources
-	self.last_comment.free();
-	self.last_comment = {};
-	self.lexer.free();
-
-	return doc;
-}
-
-fn Token? YadgParser.find_comment(&self)
-{
-	if (self.peek().range.start.ln - self.last_comment.range.end.ln < 2)
-	{
-		return self.last_comment;
-	}
-	return NOT_FOUND?;
-}
+fn AstNode*? YadgParser.parse(&self) => self.translation_unit()!;
 
 fn void YadgParser.report_error(&self, String err_msg)
 {
 	io::eprintfn("PARSER ERROR at Ln: %d, Col: %d -- %s [next token: %s]",
-		self.lexer.ln, self.lexer.col, err_msg, self.tokens.first() ?? (Token){});
+		self.lexer.ln, self.lexer.col, err_msg, self.tokens.first()!!);
 }
 
-// Synchroinze discards token until the next semicolon or {..} block
+// Synchronize discards token until the next semicolon or {..} block
 fn void? YadgParser.synchronize(&self)
 {
 	while LOOP: (true)
 	{
-		switch (self.peek().type)
+		switch (self.peek())
 		{
 			case SEMICOLON:
 			case BRACE:
@@ -91,7 +80,7 @@ fn void? YadgParser.synchronize(&self)
 }
 
 // Return next token that will be consumed next.
-fn Token YadgParser.peek(&self)
+fn TokenType YadgParser.peek(&self)
 {
 	if (self.tokens.len() == 0)
 	{
@@ -99,18 +88,15 @@ fn Token YadgParser.peek(&self)
 		{
 			self.tokens.push(tok);
 		}
-		else
-		{
-			return (Token){};
-		}
 	}
-	return self.tokens.first()!!;
+	if (try tok = self.tokens.first() && tok) return tok.type;
+	return EMPTY;
 }
 
 // Consume current token and return it.
-fn Token? YadgParser.advance(&self)
+fn Token*? YadgParser.advance(&self)
 {
-	Token tok;
+	Token* tok;
 	if (self.tokens.len())
 	{
 		tok = self.tokens.pop_first()!;
@@ -126,7 +112,7 @@ fn Token? YadgParser.advance(&self)
 // If next token is tok, then advance and return true; otherwise, return false.
 fn bool? YadgParser.expect(&self, TokenType type)
 {
-	if (self.peek().type == type)
+	if (self.peek() == type)
 	{
 		self.advance()!;
 		return true;
@@ -134,5 +120,5 @@ fn bool? YadgParser.expect(&self, TokenType type)
 	return false;
 }
 
-fn void YadgParser.push_back(&self, Token tok) => self.tokens.push_front(tok);
+fn void YadgParser.push_back(&self, Token* tok) => self.tokens.push_front(tok);
 

@@ -9,8 +9,8 @@ fn void? run_parser(String input) @private
 		AstPrinter printer;
 		printer.init(io::stderr());
 
-		YadgParser *parser = (YadgParser){}.init(tmem);
-		printer.visit(parser.parse(&&io::wrap_bytes(input))!)!;
+		YadgParser *parser = (YadgParser){}.init(tmem, &&io::wrap_bytes(input));
+		printer.visit(parser.parse()!)!;
 	};
 }
 
@@ -23,8 +23,8 @@ fn void test_parser_mem() @test
 
 	@assert_leak(true)
 	{
-		YadgParser *parser = (YadgParser){}.init(mem);
-		AstNode* doc = parser.parse(&&io::wrap_bytes(input))!!;
+		YadgParser *parser = (YadgParser){}.init(mem, &&io::wrap_bytes(input));
+		AstNode* doc = parser.parse()!!;
 		doc.free();
 		parser.free();
 	};
