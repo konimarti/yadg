@@ -178,7 +178,7 @@ fn void? scan_tokens(InStream input) => @assert_leak(true)
 
 fn void? parse_file(InStream input) => @pool()
 {
-	YadgParser *parser = (YadgParser){}.init(tmem, io::stdout());
+	YadgParser *parser = (YadgParser){}.init(tmem);
 	AstNode* document = parser.parse(input)!;
 	// io::printn(document);
 	AstPrinter printer;

@@ -9,8 +9,24 @@ fn void? run_parser(String input) @private
 		AstPrinter printer;
 		printer.init(io::stderr());
 
-		YadgParser *parser = (YadgParser){}.init(tmem, io::stdout());
+		YadgParser *parser = (YadgParser){}.init(tmem);
 		printer.visit(parser.parse(&&io::wrap_bytes(input))!)!;
+	};
+}
+
+fn void test_parser_mem() @test
+{
+	String input = `
+	<* this is a comment *>
+	module foo::bar @if(env::LINUX);
+	`;
+
+	@assert_leak(true)
+	{
+		YadgParser *parser = (YadgParser){}.init(mem);
+		AstNode* doc = parser.parse(&&io::wrap_bytes(input))!!;
+		doc.free();
+		parser.free();
 	};
 }
 

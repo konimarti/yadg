@@ -7,20 +7,18 @@ import std::io;
 struct YadgParser
 {
 	Lexer        lexer;
+	TokenList    consumed; // keep track of consumed tokens
 	TokenList    tokens;
 	Token        last_comment;
-	OutStream    output;
-	String       path_prefix;
 	Allocator    allocator;
 }
 
-fn YadgParser* YadgParser.init(&self, Allocator allocator, OutStream output, String prefix = "")
+fn YadgParser* YadgParser.init(&self, Allocator allocator)
 {
 	*self = {
-		.output      = output,
-		.path_prefix = prefix,
 		.allocator   = allocator
 	};
+	self.consumed.init(self.allocator);
 	self.tokens.init(self.allocator);
 	return self;
 }
@@ -29,6 +27,9 @@ fn void YadgParser.free(&self)
 {
 	if (!self.allocator) return;
 	self.last_comment.free();
+	foreach (tok : self.consumed) tok.free();
+	self.consumed.free();
+	foreach (tok : self.tokens) tok.free();
 	self.tokens.free();
 	*self = {};
 }
@@ -46,6 +47,7 @@ fn AstNode*? YadgParser.parse(&self, InStream file) => @pool()
 	AstNode *doc = self.translation_unit()!;
 
 	// Release unused resources
+	self.last_comment.free();
 	self.last_comment = {};
 	self.lexer.free();
 
@@ -108,8 +110,17 @@ fn Token YadgParser.peek(&self)
 // Consume current token and return it.
 fn Token? YadgParser.advance(&self)
 {
-	if (self.tokens.len()) return self.tokens.pop_first();
-	return self.lexer.next()!;
+	Token tok;
+	if (self.tokens.len())
+	{
+		tok = self.tokens.pop_first()!;
+	}
+	else
+	{
+		tok = self.lexer.next()!;
+	}
+	self.consumed.push(tok);
+	return tok;
 }
 
 // If next token is tok, then advance and return true; otherwise, return false.
