@@ -4,7 +4,7 @@ import yadg::lexer;
 import std::collections::list;
 import std::io;
 
-faultdef INVALID_AST, INVALID_TYPE;
+faultdef INVALID_AST, INVALID_TYPE, INVALID_PATH;
 
 enum AstType
 {
@@ -448,15 +448,17 @@ path
 	: IDENT SCOPE
 	| path IDENT SCOPE
 	;
+
+FIXME: this is more like 'path_ident'
 *>
-fn AstNode*? YadgParser.path(&self, TokenType path_type = IDENT)
+fn AstNode*? YadgParser.path(&self)
 {
 	AstNode* node = self.make_node(AST_PATH);
 	node.list.init(self.allocator);
 	defer catch node.list.free();
 
 	// path_ident
-	while (self.peek() != EOF && self.peek() == path_type)
+	while (self.peek() != EOF && self.peek() == IDENT)
 	{
 		node.list.push(self.advance()!);
 		if (self.expect(SCOPE)!) continue;
@@ -471,8 +473,43 @@ path_ident
 	| IDENT
 	;
 *>
-fn AstNode*? YadgParser.path_ident(&self) => self.path(IDENT);
+fn AstNode*? YadgParser.path_ident(&self) => self.path();
 
+<*
+path_const
+	: path CONST_IDENT
+	| CONST_IDENT
+	;
+*>
+fn AstNode*? YadgParser.path_const(&self)
+{
+	AstNode* path = self.path()!;
+	if (self.peek() != CONST_IDENT)
+	{
+		path.free();
+		return INVALID_PATH?;
+	}
+	path.list.push(self.advance()!);
+	return path;
+}
+
+<*
+path_at_ident
+	: path AT_IDENT
+	| AT_IDENT
+	;
+*>
+fn AstNode*? YadgParser.path_at_ident(&self)
+{
+	AstNode* path = self.path()!;
+	if (self.peek() != AT_IDENT)
+	{
+		path.free();
+		return INVALID_PATH?;
+	}
+	path.list.push(self.advance()!);
+	return path;
+}
 <*
 opt_attributes
 	: attribute_list
@@ -1353,7 +1390,46 @@ fn AstNode*? YadgParser.define_declaration(&self)
 				// alias_define_ident
 				AstNode* node = self.make_node(AST_ALIAS_DEFINE_IDENT);
 
-				// ..
+				switch (self.peek())
+				{
+					case IDENT:
+					case CONST_IDENT:
+					case AT_IDENT:
+						node.alias_define.define_ident = self.advance()!;
+					default:
+						self.report_error("alias ident: wrong type_ident token");
+						return INVALID_AST?;
+				}
+
+				node.alias_define.opt_attributes = self.opt_attributes()!;
+				if (!self.expect(ASSIGN)!)
+				{
+					self.report_error("alias ident: expected an 'ASSIGN' token");
+					return INVALID_AST?;
+				}
+
+				switch (node.alias_define.define_ident.type)
+				{
+					case IDENT:
+						node.alias_define.path = self.path_ident()!;
+					case CONST_IDENT:
+						node.alias_define.path = self.path_const()!;
+					case AT_IDENT:
+						node.alias_define.path = self.path_at_ident()!;
+					default:
+						unreachable("alias ident: invalid path token");
+				}
+
+				if (self.peek() == BRACE)
+				{
+					node.alias_define.opt_generic_params = self.advance()!;
+				}
+
+				if (!self.expect(SEMICOLON)!)
+				{
+					self.report_error("alias ident: expected 'SEMICOLON'");
+					return INVALID_AST?;
+				}
 
 				return node;
 			case TYPE_IDENT:
@@ -1372,7 +1448,7 @@ fn AstNode*? YadgParser.define_declaration(&self)
 
 				if (!self.expect(SEMICOLON)!)
 				{
-					self.report_error("attrdef: expected 'SEMICOLON'");
+					self.report_error("alias TYPE_IDENT: expected 'SEMICOLON'");
 					return INVALID_AST?;
 				}
 

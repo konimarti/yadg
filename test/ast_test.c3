@@ -222,20 +222,21 @@ fn void test_alias() @test
 	String input = `
 	<* this is a attrdef *>
 	attrdef @Hello @local = @private, @deprecated , ;
+	attrdef @MathLibc(name) = @extern(name), @link(env::POSIX, "m");
 
 	<* this is a alias TYPE_IDENT *>
 	alias OnceFn = fn void();
 	alias PathList = List { Path };
+	alias Char16 @deprecated = uint[<3>];
+	alias WString = Char16*;
+	alias Matrix2 = math::Matrix2x2{float};
+	alias Win32_LPWIN32_FIND_DATAW = Win32_WIN32_FIND_DATAW*;
+	alias BacktraceList = List{Backtrace};
+	alias spawn_file_actions_init = posix_spawn_file_actions_init;
+	alias spawnp = posix_spawnp;
+	alias CONST_IDENT = math::CONST_SOMETHING;
 
-	// module foo::bar @if(env::LINUX);
-	// fn Char16[<*>]? Adder.sum(int a, int b) => a + b;
-        //
-	// module foo::bar @if(!env::LINUX);
-	// alias Char16** = uint[<3>];
-	// alias WString = inline Char16*;
-	// alias Matrix2 = math::Matrix2x2{float};
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
 
