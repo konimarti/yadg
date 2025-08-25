@@ -19,6 +19,8 @@ fn void test_parser_mem() @test
 	String input = `
 	<* this is a comment *>
 	module foo::bar @if(env::LINUX);
+	const Win32_SHORT POLLPRI    = 0x0400;
+	const float TOINTF = (float)(1 / math::FLOAT_EPSILON);
 	`;
 
 	@assert_leak(true)
@@ -252,4 +254,32 @@ fn void test_global_decl() @test
 	run_parser(input)!!;
 }
 
+
+fn void test_const_decl() @test
+{
+	String input = `
+	const Win32_DWORD WS_TILED            = 0x00000000L;
+	const Win32_DWORD WS_TILEDWINDOW      = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+	const Win32_DWORD WS_VISIBLE          = 0x10000000L;
+	const Win32_DWORD WS_VSCROLL          = 0x00200000L;
+	const Win32_UINT MB_OK = 0x00000000;
+	const Win32_UINT MB_OKCANCEL = 0x00000001;
+	const Win32_UINT MB_USERICON = 0x00000080;
+	const Win32_UINT MB_ICONWARNING = MB_ICONEXCLAMATION;
+	const Win32_UINT MB_ICONSTOP = MB_ICONHAND;
+	const GWL_STYLE @deprecated("abc") = -16;
+	const GWL_EXSTYLE = -20;
+	const GWL_ID = -12;
+	const GWLP_WNDPROC = -4;
+	const GWLP_HINSTANCE = -6;
+	const GWLP_HWNDPARENT = -8;
+	const GWLP_USERDATA = -21;
+	const GWLP_ID = -12;
+	const usz _SS_PAD1SIZE = 6;
+	const usz _SS_PAD2SIZE = 112;
+	const Win32_SHORT POLLERR    = 0x0001;
+	const Win32_SHORT POLLPRI    = 0x0400;
+	`;
+	run_parser(input)!!;
+}
 

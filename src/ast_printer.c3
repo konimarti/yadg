@@ -52,11 +52,6 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.top_level.comment)!;
 			n += self.visit(node.top_level.decl)!;
 
-		case AST_EXPR:
-		case AST_TYPE:
-		case AST_PATH:
-			n += write_token_list(f, prefix, node.tok_list)!;
-
 		case AST_MODULE:
 			n += self.visit(node._module.path_ident)!;
 			n += write_token(f, prefix, node._module.module_params)!;
@@ -153,11 +148,22 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += self.visit(node.global_decl.opt_attributes)!;
 			n += self.visit(node.global_decl.expr)!;
 
+		case AST_CONST_DECL:
+			n += self.visit(node.const_decl.optional_type)!;
+			n += write_token(f, prefix, node.const_decl.const_ident)!;
+			n += self.visit(node.const_decl.opt_attributes)!;
+			n += self.visit(node.const_decl.expr)!;
+
 		case AST_INLINE:
 		case AST_EXTERN:
 		case AST_CONST:
 		case AST_TLOCAL:
 			n += self.visit(node.child)!;
+
+		case AST_EXPR:
+		case AST_TYPE:
+		case AST_PATH:
+			n += write_token_list(f, prefix, node.tok_list)!;
 
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;

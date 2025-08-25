@@ -11,10 +11,11 @@ struct YadgParser
 	TokenList    tokens;
 	Token*       last_comment;
 	AstList      nodes;
+	String	     filename;
 	Allocator    allocator;
 }
 
-fn YadgParser* YadgParser.init(&self, Allocator allocator, InStream file)
+fn YadgParser* YadgParser.init(&self, Allocator allocator, InStream file, String filename = "")
 {
 	*self = {
 		.allocator   = allocator
@@ -23,6 +24,7 @@ fn YadgParser* YadgParser.init(&self, Allocator allocator, InStream file)
 	self.consumed.init(self.allocator);
 	self.tokens.init(self.allocator);
 	self.nodes.init(self.allocator);
+	self.filename = filename;
 	return self;
 }
 
@@ -54,8 +56,8 @@ fn AstNode*? YadgParser.parse(&self) => self.translation_unit()!;
 
 fn void YadgParser.report_error(&self, String err_msg)
 {
-	io::eprintfn("PARSER ERROR at Ln: %d, Col: %d -- %s [next token: %s]",
-		self.lexer.ln, self.lexer.col, err_msg, self.peek());
+	io::eprintfn("PARSER ERROR at Ln: %d, Col: %d -- %s [next token: %s] %s",
+		self.lexer.ln, self.lexer.col, err_msg, self.peek(), self.filename);
 }
 
 // Synchronize discards token until the next semicolon or {..} block

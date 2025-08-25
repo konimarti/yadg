@@ -145,7 +145,7 @@ fn bool? yadg_update_report(Path path, bool is_dir, void* data)
 
 		io::printfn("-- scanning file: %s", path.str_view());
 		// if (try scan_tokens(&f))
-		if (try parse_file(&f))
+		if (try parse_file(&f, path.str_view()))
 		{
 			report.pass++;
 		}
@@ -175,13 +175,15 @@ fn void? scan_tokens(InStream input) => @assert_leak(true)
 	lexer.free();
 }
 
-fn void? parse_file(InStream input)
+fn void? parse_file(InStream input, String name = "")
 {
-	YadgParser *parser = (YadgParser){}.init(mem, input);
+	YadgParser *parser = (YadgParser){}.init(mem, input, name);
 	AstNode* document = parser.parse()!;
+
 	AstPrinter printer;
 	printer.init();
 	printer.visit(document)!;
+
 	document.free();
 	parser.free();
 }

@@ -34,6 +34,7 @@ enum AstType
 	AST_ALIAS_TYPE_IDENT,
 	AST_ATTRIBUTE_DEF,
 	AST_GLOBAL_DECL,
+	AST_CONST_DECL,
 
 	AST_EXPR,
 
@@ -166,6 +167,13 @@ struct AstNode (Printable)
 			TokenList idents;		// covers 'multi_decl'
 			AstNode*  opt_attributes;
 			AstNode*  expr;
+		}
+		struct const_decl
+		{
+			AstNode* optional_type;
+			Token*   const_ident;		// covers 'multi_decl'
+			AstNode* opt_attributes;
+			AstNode* expr;
 		}
 
 		AstNode*  child;			// inline, extern
@@ -308,6 +316,12 @@ fn void AstNode.free(&self)
 			free_ast(self.global_decl.opt_attributes);
 			free_ast(self.global_decl.expr);
 
+		case AST_CONST_DECL:
+			free_ast(self.const_decl.optional_type);
+			free_tok(self.const_decl.const_ident);
+			free_ast(self.const_decl.opt_attributes);
+			free_ast(self.const_decl.expr);
+
 		case AST_INLINE:
 		case AST_EXTERN:
 		case AST_CONST:
@@ -318,8 +332,6 @@ fn void AstNode.free(&self)
 		case AST_TYPE:
 		case AST_PATH:
 			free_tok_list(&self.tok_list);
-
-
 	}
 }
 
@@ -345,7 +357,7 @@ fn AstNode*? YadgParser.translation_unit(&self)
 fn AstNode*? YadgParser.top_level(&self)
 {
 	Token* tok_comm;
-	AstNode *tl;
+	AstNode *top;
 
 	if (try c = self.comment())
 	{
@@ -357,23 +369,27 @@ fn AstNode*? YadgParser.top_level(&self)
 		return self._extern(self.top_level()!);
 	}
 
-	while LOOP: (self.peek() != EOF && tl == null)
+	while LOOP: (self.peek() != EOF && top == null)
 	{
 		switch(self.peek())
 		{
-			case MODULE:    tl = self._module()!;
-			case FAULTDEF:  tl = self.fault_decl()!;
+			case MODULE:    top = self._module()!;
+			case FAULTDEF:  top = self.fault_decl()!;
 			case UNION:
-			case STRUCT:    tl = self.struct_decl()!;
-			case ENUM:      tl = self.enum_decl()!;
-			case BITSTRUCT: tl = self.bitstruct_decl()!;
-			case INTERFACE: tl = self.interface_decl()!;
-			case FUNC:      tl = self.func_definition()!;
-			case MACRO:     tl = self.macro_decl()!;
-			case TYPEDEF:   tl = self.distinct_decl()!;
+			case STRUCT:    top = self.struct_decl()!;
+			case ENUM:      top = self.enum_decl()!;
+			case BITSTRUCT: top = self.bitstruct_decl()!;
+			case INTERFACE: top = self.interface_decl()!;
+			case FUNC:      top = self.func_definition()!;
+			case MACRO:     top = self.macro_decl()!;
+			case TYPEDEF:   top = self.distinct_decl()!;
 			case ATTRDEF:
-			case ALIAS:     tl = self.define_decl()!;
-			// case CONST:
+			case ALIAS:     top = self.define_decl()!;
+			case CONST:     top = self.const_decl()!;
+			case CT_IDENT:
+			case IMPORT:
+				self.synchronize()!;
+				return self.top_level()!;
 			default:
 				if (try decl = self.global_decl())
 				{
@@ -384,10 +400,10 @@ fn AstNode*? YadgParser.top_level(&self)
 		}
 	}
 
-	if (!tl) return null;
+	if (!top) return null;
 
 	AstNode* node = self.make_node(AST_TOP_LEVEL);
-	node.top_level.decl = tl;
+	node.top_level.decl = top;
 	node.top_level.comment = tok_comm;
 	return node;
 }
@@ -1546,6 +1562,45 @@ fn AstNode*? YadgParser.global_decl(&self)
 	if (!self.expect(SEMICOLON)!)
 	{
 		self.report_error("global_decl: expected 'SEMICOLON'");
+		return INVALID_AST?;
+	}
+
+	return node;
+}
+
+<*
+const_declaration
+	: CONST CONST_IDENT opt_attributes '=' expr ';'
+	| CONST optional_type CONST_IDENT opt_attributes '=' expr ';'
+	| CONST optional_type CONST_IDENT opt_attributes ';'
+	;
+*>
+fn AstNode*? YadgParser.const_decl(&self)
+{
+	if (!self.expect(CONST)!)
+	{
+		self.report_error("const_decl: expected 'CONST'");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = self.make_node(AST_CONST_DECL);
+	defer catch node.free();
+
+	if (self.peek() != CONST_IDENT)
+	{
+		node.global_decl.optional_type = self.optional_type()!;
+	}
+	node.const_decl.const_ident = self.advance()!;
+	node.const_decl.opt_attributes = self.opt_attributes()!;
+
+	if (self.expect(ASSIGN)!)
+	{
+		node.const_decl.expr = self.expr()!;
+	}
+
+	if (!self.expect(SEMICOLON)!)
+	{
+		self.report_error("const_decl: expected 'SEMICOLON'");
 		return INVALID_AST?;
 	}
 

@@ -492,7 +492,7 @@ fn String? Lexer.scan_surround(&self, int depth, String open, String close, Allo
 		switch (c)
 		{
 			case '/':
-				buf.append_char(c); // Consume '/'
+				buf.append_char(self.advance()!); // Consume '/'
 				switch (self.peek()!)
 				{
 					case '/':
@@ -780,7 +780,7 @@ fn Token*? Lexer.lex_compile_time(&self) => @pool()
 		return INVALID_CHAR?;
 	}
 	text.append_char(self.advance()!); // Consume '$'
-	while ((c = self.peek()!) && (is_ident(c)))
+	while ((c = self.peek()!) && (is_ident(c) || c == '$'))
 	{
 		text.append_char(self.advance()!);
 	}
@@ -801,7 +801,7 @@ fn Token*? Lexer.lex_compile_time(&self) => @pool()
 				case STR_CONST: type = CT_CONST_IDENT;
 				case STR_TYPE:  type = CT_TYPE_IDENT;
 				case STR_IDENT: type = CT_IDENT;
-				default:        type = EMPTY;
+				default:        return INVALID_CHAR?;
 			}
 			return self.emit_token(type, str);
 	}
