@@ -222,14 +222,17 @@ fn void test_alias() @test
 	String input = `
 	<* this is a attrdef *>
 	attrdef @Hello @local = @private, @deprecated , ;
+
+	<* this is a alias TYPE_IDENT *>
+	alias OnceFn = fn void();
+	alias PathList = List { Path };
+
 	// module foo::bar @if(env::LINUX);
 	// fn Char16[<*>]? Adder.sum(int a, int b) => a + b;
         //
 	// module foo::bar @if(!env::LINUX);
 	// alias Char16** = uint[<3>];
 	// alias WString = inline Char16*;
-	// alias OnceFn = fn void();
-	// alias PathList = List { Path };
 	// alias Matrix2 = math::Matrix2x2{float};
 	`;
 	run_parser(input)!!;

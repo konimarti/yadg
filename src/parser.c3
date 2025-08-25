@@ -55,7 +55,7 @@ fn AstNode*? YadgParser.parse(&self) => self.translation_unit()!;
 fn void YadgParser.report_error(&self, String err_msg)
 {
 	io::eprintfn("PARSER ERROR at Ln: %d, Col: %d -- %s [next token: %s]",
-		self.lexer.ln, self.lexer.col, err_msg, self.tokens.first()!!);
+		self.lexer.ln, self.lexer.col, err_msg, self.peek());
 }
 
 // Synchronize discards token until the next semicolon or {..} block

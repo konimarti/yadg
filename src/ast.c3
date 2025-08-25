@@ -941,6 +941,51 @@ fn AstNode*? YadgParser.optional_type(&self)
 }
 
 <*
+typedef_type
+	: func_typedef
+	| type
+	;
+
+func_typedef
+	: FN optional_type fn_parameter_list
+	;
+*>
+fn AstNode*? YadgParser.typedef_type(&self)
+{
+	if (self.peek() == FUNC) return self.func_type()!;
+	return self.type(true, true)!;
+}
+
+<*
+func_typedef
+	: FN optional_type fn_parameter_list
+	;
+*>
+fn AstNode*? YadgParser.func_type(&self)
+{
+	if (!self.expect(FUNC)!)
+	{
+		self.report_error("func_type: expected a 'FUNC' token");
+		return INVALID_AST?;
+	}
+
+	AstNode* node = self.make_node(AST_FUNC_TYPEDEF);
+	defer catch allocator::free(self.allocator, node);
+
+	node.func_typedef.optional_type = self.optional_type()!;
+
+	if (self.peek() != PAREN)
+	{
+		self.report_error("func_type: expected a 'PAREN' token as fn_paramter_list");
+		return INVALID_AST?;
+	}
+	node.func_typedef.fn_parameter_list = self.advance()!;
+
+	return node;
+}
+
+
+<*
 interface_declaration
 	: INTERFACE interface_declaration_name '{' '}'
 	| INTERFACE interface_declaration_name '{' interface_body '}'
@@ -1315,7 +1360,21 @@ fn AstNode*? YadgParser.define_declaration(&self)
 				// alias_type_ident
 				AstNode* node = self.make_node(AST_ALIAS_TYPE_IDENT);
 
-				// ..
+				node.alias_type.type_ident = self.advance()!;
+				node.alias_type.opt_attributes = self.opt_attributes()!;
+				if (!self.expect(ASSIGN)!)
+				{
+					self.report_error("alias TYPE_IDENT: expected an 'ASSIGN' token");
+					return INVALID_AST?;
+				}
+				node.alias_type.typedef_type = self.typedef_type()!;
+				node.alias_type.opt_attributes_rhs = self.opt_attributes()!;
+
+				if (!self.expect(SEMICOLON)!)
+				{
+					self.report_error("attrdef: expected 'SEMICOLON'");
+					return INVALID_AST?;
+				}
 
 				return node;
 			default:
@@ -1347,6 +1406,12 @@ fn AstNode*? YadgParser.define_declaration(&self)
 					node.attr_def.attribute_comma_list.push(attr);
 					if (self.expect(COMMA)!) continue;
 				}
+			}
+
+			if (!self.expect(SEMICOLON)!)
+			{
+				self.report_error("attrdef: expected 'SEMICOLON'");
+				return INVALID_AST?;
 			}
 
 			return node;
