@@ -9,6 +9,7 @@ faultdef INVALID_AST, INVALID_TYPE, INVALID_PATH;
 enum AstType
 {
 	AST_TRANSLATION_UNIT,
+	AST_OPT_ATTRIBUTES,
 	AST_TOP_LEVEL,
 	AST_MODULE,
 	AST_ATTRIBUTE,
@@ -23,6 +24,7 @@ enum AstType
 	AST_INLINE,
 	AST_EXTERN,
 	AST_CONST,
+	AST_TLOCAL,
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
 	AST_FUNC_TYPEDEF,
@@ -31,10 +33,12 @@ enum AstType
 	AST_ALIAS_DEFINE_IDENT,
 	AST_ALIAS_TYPE_IDENT,
 	AST_ATTRIBUTE_DEF,
+	AST_GLOBAL_DECLARATION,
+
+	AST_EXPR,
 
 	AST_TYPE, // TokenList list
 	AST_PATH, // TokenList list
-	AST_OPT_ATTRIBUTES, // AstList alist
 }
 
 alias AstList = List{ AstNode* };
@@ -69,35 +73,35 @@ struct AstNode (Printable)
 		struct struct_declaration
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl; // paren
+			Token*   opt_interface_impl;	// paren
 			AstNode* opt_attributes;
-			Token*   struct_body; // brace
+			Token*   struct_body;		// brace
 		}
 		struct enum_declaration
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl; // paren
+			Token*   opt_interface_impl;	// paren
 			AstNode* enum_spec;
 			AstNode* opt_attributes;
-			Token*   enum_list; // brace
+			Token*   enum_list;		// brace
 		}
 		struct enum_spec
 		{
-			AstNode* base_type_no_generics; // base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
-			Token*   enum_params; // paren
+			AstNode* base_type_no_generics;	// base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
+			Token*   enum_params;		// paren
 		}
 		struct bitstruct_declaration
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl; // paren
-			AstNode* type_no_generics; // base_type_no_generics / type_no_generics type_suffix
+			Token*   opt_interface_impl;	// paren
+			AstNode* type_no_generics;	// base_type_no_generics / type_no_generics type_suffix
 			AstNode* opt_attributes;
-			Token*   bitstruct_body; // brace
+			Token*   bitstruct_body;	// brace
 		}
 		struct interface_declaration
 		{
 			AstNode*  interface_declaration_name;
-			Token*    interface_body; // brace
+			Token*    interface_body;	// brace
 		}
 		struct interface_declaration_name
 		{
@@ -107,7 +111,7 @@ struct AstNode (Printable)
 		struct distinct_declaration
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl; // paren
+			Token*   opt_interface_impl;	// paren
 			AstNode* opt_attributes;
 			bool     opt_inline;
 			AstNode* type;
@@ -115,7 +119,7 @@ struct AstNode (Printable)
 		struct func_definition
 		{
 			AstNode* func_header;
-			Token*   fn_parameter_list; // paren
+			Token*   fn_parameter_list;	// paren
 			AstNode* opt_attributes;
 		}
 		struct func_header
@@ -127,12 +131,12 @@ struct AstNode (Printable)
 		struct func_typedef
 		{
 			AstNode* optional_type;
-			Token*   fn_parameter_list; // paren
+			Token*   fn_parameter_list;	// paren
 		}
 		struct macro_declaration
 		{
 			AstNode* macro_header;
-			Token*   macro_params; // paren
+			Token*   macro_params;		// paren
 			AstNode* opt_attributes;
 		}
 		struct alias_define
@@ -156,10 +160,17 @@ struct AstNode (Printable)
 			AstNode* opt_attributes;
 			AstList  attribute_comma_list; 	// comma is optional
 		}
+		struct global_declaration
+		{
+			AstNode*  optional_type;
+			TokenList idents;		// covers 'multi_declaration'
+			AstNode*  opt_attributes;
+			AstNode*  expr;
+		}
 
-		AstNode*  child; // inline, extern
-		TokenList tok_list;  // type, optional_type
-		AstList   ast_list; // opt_attributes
+		AstNode*  child;			// inline, extern
+		TokenList tok_list;			// type, optional_type
+		AstList   ast_list;			// opt_attributes
 	}
 }
 
@@ -291,11 +302,19 @@ fn void AstNode.free(&self)
 			free_ast(self.attr_def.opt_attributes);
 			free_ast_list(&self.attr_def.attribute_comma_list);
 
+		case AST_GLOBAL_DECLARATION:
+			free_ast(self.global_declaration.optional_type);
+			free_tok_list(&self.global_declaration.idents);
+			free_ast(self.global_declaration.opt_attributes);
+			free_ast(self.global_declaration.expr);
+
 		case AST_INLINE:
 		case AST_EXTERN:
 		case AST_CONST:
+		case AST_TLOCAL:
 			free_ast(self.child);
 
+		case AST_EXPR:
 		case AST_TYPE:
 		case AST_PATH:
 			free_tok_list(&self.tok_list);
@@ -355,7 +374,13 @@ fn AstNode*? YadgParser.top_level(&self)
 			case ATTRDEF:
 			case ALIAS:     tl = self.define_declaration()!;
 			// case CONST:
-			default: self.synchronize()!; return self.top_level()!;
+			default:
+				if (try decl = self.global_declaration())
+				{
+					return decl;
+				}
+				self.synchronize()!;
+				return self.top_level()!;
 		}
 	}
 
@@ -711,6 +736,13 @@ fn AstNode* YadgParser._extern(&self, AstNode* child)
 fn AstNode* YadgParser._const(&self, AstNode* child)
 {
 	AstNode* node = self.make_node(AST_CONST);
+	node.child = child;
+	return node;
+}
+
+fn AstNode* YadgParser._tlocal(&self, AstNode* child)
+{
+	AstNode* node = self.make_node(AST_TLOCAL);
 	node.child = child;
 	return node;
 }
@@ -1463,6 +1495,239 @@ fn AstNode*? YadgParser.define_declaration(&self)
 	else
 	{
 		self.report_error("define_declaration: expected either an 'ALIAS' or 'ATTRDEF' token");
+	 	return INVALID_AST?;
+	}
+}
+
+<*
+global_declaration
+	: global_storage optional_type IDENT opt_attributes ';'
+	| global_storage optional_type IDENT multi_declaration opt_attributes ';'
+	| global_storage optional_type IDENT opt_attributes '=' expr ';'
+	;
+
+global_storage
+	: TLOCAL
+	| empty
+	;
+
+multi_declaration
+	: ',' IDENT
+	| multi_declaration ',' IDENT
+	;
+
+*>
+fn AstNode*? YadgParser.global_declaration(&self)
+{
+	if (self.expect(TLOCAL)!)
+	{
+		return self._tlocal(self.global_declaration()!);
+	}
+
+	AstNode* node = self.make_node(AST_GLOBAL_DECLARATION);
+	node.global_declaration.idents.init(self.allocator);
+	defer catch node.free();
+
+	node.global_declaration.optional_type = self.optional_type()!;
+
+	while (self.peek() != EOF && self.peek() == IDENT)
+	{
+		node.global_declaration.idents.push(self.advance()!);
+		if (self.expect(COMMA)!) continue;
+	}
+
+	node.global_declaration.opt_attributes = self.opt_attributes()!;
+
+	if (self.expect(ASSIGN)!)
+	{
+		node.global_declaration.expr = self.expr()!;
+	}
+
+	if (!self.expect(SEMICOLON)!)
+	{
+		self.report_error("global_declaration: expected 'SEMICOLON'");
 		return INVALID_AST?;
 	}
+
+	return node;
+}
+
+<*
+expr
+	: assignment_expr
+	;
+
+assignment_expr
+	: ternary_expr
+	| unary_expr assignment_op assignment_expr
+	;
+
+assignment_stmt_expr
+	: ternary_stmt_expr
+	| unary_stmt_expr assignment_op assignment_expr
+	;
+
+ternary_expr
+	: suffix_expr
+	| or_expr '?' expr ':' ternary_expr
+	| suffix_expr ELVIS ternary_expr
+	| suffix_expr OPTELSE ternary_expr
+	| lambda_decl implies_body
+	;
+
+suffix_expr
+	: or_expr
+	| or_expr '?'
+	| or_expr '?' '!'
+	;
+
+or_expr
+	: and_expr
+	| or_expr OR_OP and_expr
+	| or_expr CT_OR_OP and_expr
+	;
+
+lambda_decl
+	: FN maybe_optional_type fn_parameter_list opt_attributes
+	;
+
+and_expr
+	: relational_expr
+	| and_expr AND_OP relational_expr
+	| and_expr CT_AND_OP relational_expr
+	;
+
+relational_expr
+	: additive_expr
+	| relational_expr relational_op additive_expr
+	;
+
+relational_op
+	: '<'
+	| '>'
+	| LE_OP
+	| GE_OP
+	| EQ_OP
+	| NE_OP
+	;
+
+additive_expr
+	: bit_expr
+	| additive_expr additive_op bit_expr
+	;
+
+additive_op
+	: '+'
+	| '-'
+	| CT_CONCAT_OP
+	;
+
+bit_expr
+	: shift_expr
+	| bit_expr bit_op shift_expr
+	;
+
+bit_op
+	: '&'
+	| '^'
+	| '|'
+	;
+
+shift_expr
+	: mult_expr
+	| shift_expr shift_op mult_expr
+	;
+
+shift_op
+	: SHL_OP
+	| SHR_OP
+	;
+
+mult_expr
+	: unary_expr
+	| mult_expr mult_op unary_expr
+	;
+
+mult_op
+	: '*'
+	| '/'
+	| '%'
+	;
+
+unary_expr
+	: call_expr
+	| unary_op unary_expr
+	;
+
+unary_op
+	: '&'
+	| AND_OP
+	| '*'
+	| '+'
+	| '-'
+	| '~'
+	| '!'
+	| INC_OP
+	| DEC_OP
+	| '(' type ')'
+	;
+
+call_expr
+	: primary_expr
+	| call_expr call_trailing
+	;
+
+call_trailing
+	: '[' range_loc ']'
+	| '[' range_expr ']'
+	| call_invocation opt_compound_statement
+	| '.' access_ident
+	| INC_OP
+	| DEC_OP
+	| '!'
+	| BANGBANG
+	;
+
+primary_expr
+	: base_expr
+	| initializer_list
+	| base_expr generic_expr
+	;
+
+base_expr
+	: string_expr
+	| INTEGER
+	| bytes_expr
+	| NUL
+	| CHAR_LITERAL
+	| REAL
+	| TRUE
+	| FALSE
+	| base_expr_assignable
+	;
+
+generic_expr
+	: '{' generic_parameters '}'
+	;
+
+initializer_list
+	: '{' opt_arg_list '}'
+	;
+
+*>
+
+fn AstNode*? YadgParser.expr(&self)
+{
+	// FIXME: Implement proper expr parsing. See doc-comment.
+
+	AstNode* node = self.make_node(AST_EXPR);
+	node.tok_list.init(self.allocator);
+	defer catch node.free();
+
+	while (self.peek() != EOF && self.peek() != SEMICOLON)
+	{
+		node.tok_list.push(self.advance()!);
+	}
+
+	return node;
 }

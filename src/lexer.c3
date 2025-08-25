@@ -72,6 +72,7 @@ enum TokenType : ushort
 	TYPE_IDENT,
 
 	// Keywords
+	TLOCAL,
 	EXTERN,
 	INLINE,
 	STRUCT,
@@ -718,7 +719,7 @@ fn Token*? Lexer.lex_ident(&self) => @pool()
 		case "for":       return self.emit_token(KEYWORD, str);
 		case "foreach":   return self.emit_token(KEYWORD, str);
 		case "foreach_r": return self.emit_token(KEYWORD, str);
-		case "tlocal":    return self.emit_token(KEYWORD, str);
+		case "tlocal":    return self.emit_token(TLOCAL, str);
 		case "inline":    return self.emit_token(INLINE, str);
 		case "extern":    return self.emit_token(EXTERN, str);
 		// Base Types

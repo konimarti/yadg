@@ -52,6 +52,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.top_level.comment)!;
 			n += self.visit(node.top_level.decl)!;
 
+		case AST_EXPR:
 		case AST_TYPE:
 		case AST_PATH:
 			n += write_token_list(f, prefix, node.tok_list)!;
@@ -146,8 +147,16 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			foreach (attr : node.attr_def.attribute_comma_list)
 				n += self.visit(attr)!;
 
+		case AST_GLOBAL_DECLARATION:
+			n += self.visit(node.global_declaration.optional_type)!;
+			n += write_token_list(f, prefix, node.global_declaration.idents)!;
+			n += self.visit(node.global_declaration.opt_attributes)!;
+			n += self.visit(node.global_declaration.expr)!;
+
 		case AST_INLINE:
 		case AST_EXTERN:
+		case AST_CONST:
+		case AST_TLOCAL:
 			n += self.visit(node.child)!;
 
 		default:

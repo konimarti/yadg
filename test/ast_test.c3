@@ -240,3 +240,16 @@ fn void test_alias() @test
 	run_parser(input)!!;
 }
 
+fn void test_global_decl() @test
+{
+	String input = `
+	tlocal Allocator thread_allocator @private = base_allocator();
+	tlocal Allocator current_temp = &LAZY_TEMP;
+	tlocal TempAllocator* top_temp;
+	tlocal bool auto_create_temp = false;
+	bool auto_create_temp2 = false;
+	`;
+	run_parser(input)!!;
+}
+
+
