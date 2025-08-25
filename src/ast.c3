@@ -28,6 +28,12 @@ enum AstType
 	AST_MACRO_DECLARATION,
 	AST_DISTINCT_DECLARATION,
 
+	// NEW
+	AST_FUNC_TYPEDEF,
+	AST_ALIAS_DEFINE_IDENT,
+	AST_ALIAS_TYPE_IDENT,
+	AST_ATTRIBUTE_DEF,
+
 	AST_TYPE, // TokenList list
 	AST_PATH, // TokenList list
 	AST_OPT_ATTRIBUTES, // AstList alist
@@ -52,9 +58,9 @@ struct AstNode (Printable)
 		}
 		struct _module
 		{
-			AstNode*  path_ident;
-			Token*     module_params;
-			AstNode*  opt_attributes;
+			AstNode* path_ident;
+			Token*   module_params;
+			AstNode* opt_attributes;
 		}
 		struct _attribute
 		{
@@ -67,51 +73,51 @@ struct AstNode (Printable)
 		}
 		struct faults
 		{
-			Token*    const_ident;
+			Token*   const_ident;
 			AstNode* opt_attributes;
 		}
 		struct struct_declaration
 		{
-			Token*    type_ident;
-			Token*    opt_interface_impl; // paren
+			Token*   type_ident;
+			Token*   opt_interface_impl; // paren
 			AstNode* opt_attributes;
-			Token*    struct_body; // brace
+			Token*   struct_body; // brace
 		}
 		struct enum_declaration
 		{
-			Token*    type_ident;
-			Token*    opt_interface_impl; // paren
+			Token*   type_ident;
+			Token*   opt_interface_impl; // paren
 			AstNode* enum_spec;
 			AstNode* opt_attributes;
-			Token*    enum_list; // brace
+			Token*   enum_list; // brace
 		}
 		struct enum_spec
 		{
 			AstNode* base_type_no_generics; // base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
-			Token*    enum_params; // paren
+			Token*   enum_params; // paren
 		}
 		struct bitstruct_declaration
 		{
-			Token*    type_ident;
-			Token*    opt_interface_impl; // paren
+			Token*   type_ident;
+			Token*   opt_interface_impl; // paren
 			AstNode* type_no_generics; // base_type_no_generics / type_no_generics type_suffix
 			AstNode* opt_attributes;
-			Token*    bitstruct_body; // brace
+			Token*   bitstruct_body; // brace
 		}
 		struct interface_declaration
 		{
 			AstNode*  interface_declaration_name;
-			Token*     interface_body; // brace
+			Token*    interface_body; // brace
 		}
 		struct interface_declaration_name
 		{
-			Token*     type_ident;
+			Token*    type_ident;
 			TokenList interface_parents;
 		}
 		struct distinct_declaration
 		{
-			Token*    type_ident;
-			Token*    opt_interface_impl; // paren
+			Token*   type_ident;
+			Token*   opt_interface_impl; // paren
 			AstNode* opt_attributes;
 			bool     opt_inline;
 			AstNode* type;
@@ -119,21 +125,48 @@ struct AstNode (Printable)
 		struct func_definition
 		{
 			AstNode* func_header;
-			Token*    fn_parameter_list; // paren
+			Token*   fn_parameter_list; // paren
 			AstNode* opt_attributes;
 		}
 		struct func_header
 		{
 			AstNode* optional_type;
 			AstNode* type;
-			Token*    func_macro_name;
+			Token*   func_macro_name;
+		}
+		struct func_typedef
+		{
+			AstNode* optional_type;
+			Token*   fn_parameter_list; // paren
 		}
 		struct macro_declaration
 		{
 			AstNode* macro_header;
-			Token*    macro_params; // paren
+			Token*   macro_params; // paren
 			AstNode* opt_attributes;
 		}
+		struct alias_define
+		{
+			Token*   define_ident; 		// either an IDENT, CONST_IDENT, or AT_IDENT
+			AstNode* opt_attributes;
+			AstNode* path; 			// either an path_ident, path_const, or path_at_ident
+			Token*   opt_generic_params; 	// brace
+		}
+		struct alias_type
+		{
+			Token*   type_ident;
+			AstNode* opt_attributes;
+			AstNode* typedef_type; 		// func_typedef / type
+			AstNode* opt_attributes_rhs;
+		}
+		struct attr_def
+		{
+			Token*   at_type_ident;
+			Token*   opt_parameters;	// paren
+			AstNode* opt_attributes;
+			AstList  attribute_comma_list; 	// comma is optional
+		}
+
 		AstNode*  child; // inline, extern
 		TokenList list;  // type, optional_type
 		AstList   alist; // opt_attributes
@@ -247,6 +280,28 @@ fn void AstNode.free(&self)
 			free_tok(self.macro_declaration.macro_params);
 			free_ast(self.macro_declaration.opt_attributes);
 
+		case AST_FUNC_TYPEDEF:
+			free_ast(self.func_typedef.optional_type);
+			free_tok(self.func_typedef.fn_parameter_list);
+
+		case AST_ALIAS_DEFINE_IDENT:
+			free_tok(self.alias_define.define_ident);
+			free_ast(self.alias_define.opt_attributes);
+			free_ast(self.alias_define.path);
+			free_tok(self.alias_define.opt_generic_params);
+
+		case AST_ALIAS_TYPE_IDENT:
+			free_tok(self.alias_type.type_ident);
+			free_ast(self.alias_type.opt_attributes);
+			free_ast(self.alias_type.typedef_type);
+			free_ast(self.alias_type.opt_attributes_rhs);
+
+		case AST_ATTRIBUTE_DEF:
+			free_tok(self.attr_def.at_type_ident);
+			free_tok(self.attr_def.opt_parameters);
+			free_ast(self.attr_def.opt_attributes);
+			free_ast_list(&self.attr_def.attribute_comma_list);
+
 		case AST_INLINE:
 		case AST_EXTERN:
 		case AST_CONST:
@@ -309,7 +364,8 @@ fn AstNode*? YadgParser.top_level(&self)
 			case FUNC:      tl = self.func_definition()!;
 			case MACRO:     tl = self.macro_declaration()!;
 			case TYPEDEF:   tl = self.distinct_declaration()!;
-			// case ALIAS:    node.top_level.decl = self.alias_stmt()!;
+			case ATTRDEF:
+			case ALIAS:     tl = self.define_declaration()!;
 			// case CONST:
 			default: self.synchronize()!; return self.top_level()!;
 		}
@@ -449,6 +505,18 @@ fn AstNode*? YadgParser.opt_attributes(&self)
 
 <*
  Returns an Attribute node or null if no attribute was found.
+ FIXME: Handle 'path AT_TYPE_IDENT'
+
+attribute
+	: attribute_name
+	| attribute_name '(' attribute_param_list ')'
+	;
+
+attribute_name
+	: AT_IDENT
+	| AT_TYPE_IDENT
+	| path AT_TYPE_IDENT
+	;
 *>
 fn AstNode*? YadgParser._attribute(&self)
 {
@@ -1184,4 +1252,114 @@ fn AstNode*? YadgParser.distinct_declaration(&self)
 	node.distinct_declaration.type = self.type(true, true)!;
 
 	return node;
+}
+
+<*
+define_declaration
+	: ALIAS define_ident ';'
+	| ATTRDEF define_attribute ';'
+	| ALIAS TYPE_IDENT opt_attributes '=' typedef_type opt_attributes ';'
+	;
+
+define_ident
+	: IDENT opt_attributes '=' path_ident opt_generic_parameters
+	| CONST_IDENT  opt_attributes '=' path_const opt_generic_parameters
+	| AT_IDENT opt_attributes '=' path_at_ident opt_generic_parameters
+	;
+
+opt_generic_parameters
+	: generic_expr
+	| empty
+	;
+
+generic_expr
+	: '{' generic_parameters '}'
+	;
+
+define_attribute
+	: AT_TYPE_IDENT '(' parameters ')' opt_attributes define_attribute_body
+	| AT_TYPE_IDENT opt_attributes define_attribute_body
+	;
+
+define_attribute_body
+	: empty
+	| '=' attribute_comma_list opt_comma
+	;
+
+attribute_comma_list
+	: attribute
+	| attribute_comma_list ',' attribute
+	;
+
+opt_comma
+	: ','
+	| empty
+	;
+*>
+fn AstNode*? YadgParser.define_declaration(&self)
+{
+	if (self.expect(ALIAS)!)
+	{
+		switch (self.peek())
+		{
+			case IDENT:
+			case CONST_IDENT:
+			case AT_IDENT:
+				// alias_define_ident
+				AstNode* node = self.make_node(AST_ALIAS_DEFINE_IDENT);
+
+				// ..
+
+				return node;
+			case TYPE_IDENT:
+				// alias_type_ident
+				AstNode* node = self.make_node(AST_ALIAS_TYPE_IDENT);
+
+				// ..
+
+				return node;
+			default:
+				self.report_error("define_declaration: invalid type after 'alias'");
+				return INVALID_AST?;
+		}
+
+	} else if (self.expect(ATTRDEF)!)
+	{
+		if (self.peek() == AT_TYPE_IDENT)
+		{
+			// attr_def
+			AstNode* node = self.make_node(AST_ATTRIBUTE_DEF);
+			node.attr_def.attribute_comma_list.init(self.allocator);
+			defer catch node.attr_def.attribute_comma_list.free();
+
+			node.attr_def.at_type_ident = self.advance()!;
+			if (self.peek() == PAREN)
+			{
+				node.attr_def.opt_parameters = self.advance()!;
+			}
+			node.attr_def.opt_attributes = self.opt_attributes()!;
+
+			if (self.expect(ASSIGN)!)
+			{
+				AstNode *attr;
+				while ((attr = self._attribute()!) && attr)
+				{
+					node.attr_def.attribute_comma_list.push(attr);
+					if (self.expect(COMMA)!) continue;
+				}
+			}
+
+			return node;
+		}
+		else
+		{
+			self.report_error("define_declaration: expected 'AT_TYPE_IDENT' token after 'attrdef'");
+			return INVALID_AST?;
+		}
+	}
+	else
+	{
+		self.report_error("define_declaration: expected either an 'ALIAS' or 'ATTRDEF' token");
+		return INVALID_AST?;
+	}
 }

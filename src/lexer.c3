@@ -67,6 +67,7 @@ enum TokenType : ushort
 	NUMBER,
 	AT_IDENT,
 	AT_TYPE_IDENT,
+	AT_CONST_IDENT,
 	CONST_IDENT,
 	TYPE_IDENT,
 
@@ -82,13 +83,14 @@ enum TokenType : ushort
 	INTERFACE,
 
 	ALIAS,
+	ATTRDEF,
 	CONST,
 	FUNC,
 	IMPORT,
 	MACRO,
 	TYPEDEF,
 
-	KEYWORD,
+	KEYWORD, // Reserved
 
 	// Base Types (base_type_no_generic)
 	VOID,
@@ -648,6 +650,7 @@ fn Token*? Lexer.lex_attribute(&self) => @pool()
 	{
 		case STR_IDENT: type = AT_IDENT;
 		case STR_TYPE:  type = AT_TYPE_IDENT;
+		case STR_CONST:  type = AT_CONST_IDENT;
 		default: return NOT_FOUND?;
 	}
 	return self.emit_token(type, str);
@@ -699,6 +702,7 @@ fn Token*? Lexer.lex_ident(&self) => @pool()
 		case "import":    return self.emit_token(IMPORT, str);
 		case "const":     return self.emit_token(CONST, str);
 		case "alias":     return self.emit_token(ALIAS, str);
+		case "attrdef":   return self.emit_token(ATTRDEF, str);
 		case "typedef":   return self.emit_token(TYPEDEF, str);
 		case "enum":      return self.emit_token(ENUM, str);
 		case "struct":    return self.emit_token(STRUCT, str);

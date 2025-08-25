@@ -44,9 +44,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	{
 		case AST_TRANSLATION_UNIT:
 			foreach (top_level : node.translation_unit.top_level_stmts)
-			{
 				n += self.visit(top_level)!;
-			}
 
 		case AST_TOP_LEVEL:
 			n += write_token(f, prefix, node.top_level.comment)!;
@@ -63,16 +61,15 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 		case AST_FAULT_DECLARATION:
 			foreach (top_level : node.translation_unit.top_level_stmts)
-			{
 				n += self.visit(top_level)!;
-			}
 
 		case AST_FAULTS:
 			n += write_token(f, prefix, node.faults.const_ident)!;
 			n += self.visit(node.faults.opt_attributes)!;
 
 		case AST_OPT_ATTRIBUTES:
-			foreach (attr : node.alist) n += self.visit(attr)!;
+			foreach (attr : node.alist)
+				n += self.visit(attr)!;
 
 		case AST_ATTRIBUTE:
 			n += write_token(f, prefix, node._attribute.attribute_name)!;
@@ -131,6 +128,29 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += self.visit(node.distinct_declaration.opt_attributes)!;
 			if (node.distinct_declaration.opt_inline) n += write_string(f, prefix, "INLINE")!;
 			n += self.visit(node.distinct_declaration.type)!;
+
+		case AST_FUNC_TYPEDEF:
+			n += self.visit(node.func_typedef.optional_type)!;
+			n += write_token(f, prefix, node.func_typedef.fn_parameter_list)!;
+
+		case AST_ALIAS_DEFINE_IDENT:
+			n += write_token(f, prefix, node.alias_define.define_ident)!;
+			n += self.visit(node.alias_define.opt_attributes)!;
+			n += self.visit(node.alias_define.path)!;
+			n += write_token(f, prefix, node.alias_define.opt_generic_params)!;
+
+		case AST_ALIAS_TYPE_IDENT:
+			n += write_token(f, prefix, node.alias_type.type_ident)!;
+			n += self.visit(node.alias_type.opt_attributes)!;
+			n += self.visit(node.alias_type.typedef_type)!;
+			n += self.visit(node.alias_type.opt_attributes_rhs)!;
+
+		case AST_ATTRIBUTE_DEF:
+			n += write_token(f, prefix, node.attr_def.at_type_ident)!;
+			n += write_token(f, prefix, node.attr_def.opt_parameters)!;
+			n += self.visit(node.attr_def.opt_attributes)!;
+			foreach (attr : node.attr_def.attribute_comma_list)
+				n += self.visit(attr)!;
 
 		case AST_INLINE:
 		case AST_EXTERN:
