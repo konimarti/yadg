@@ -13,14 +13,14 @@ enum AstType
 	AST_TOP_LEVEL,
 	AST_MODULE,
 	AST_ATTRIBUTE,
-	AST_FAULT_DECLARATION,
+	AST_FAULT_DECL,
 	AST_FAULTS,
-	AST_STRUCT_DECLARATION,
-	AST_ENUM_DECLARATION,
+	AST_STRUCT_DECL,
+	AST_ENUM_DECL,
 	AST_ENUM_SPEC,
-	AST_BITSTRUCT_DECLARATION,
-	AST_INTERFACE_DECLARATION,
-	AST_INTERFACE_DECLARATION_NAME,
+	AST_BITSTRUCT_DECL,
+	AST_INTERFACE_DECL,
+	AST_INTERFACE_DECL_NAME,
 	AST_INLINE,
 	AST_EXTERN,
 	AST_CONST,
@@ -28,12 +28,12 @@ enum AstType
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
 	AST_FUNC_TYPEDEF,
-	AST_MACRO_DECLARATION,
-	AST_DISTINCT_DECLARATION,
+	AST_MACRO_DECL,
+	AST_DISTINCT_DECL,
 	AST_ALIAS_DEFINE_IDENT,
 	AST_ALIAS_TYPE_IDENT,
 	AST_ATTRIBUTE_DEF,
-	AST_GLOBAL_DECLARATION,
+	AST_GLOBAL_DECL,
 
 	AST_EXPR,
 
@@ -70,14 +70,14 @@ struct AstNode (Printable)
 			Token*   const_ident;
 			AstNode* opt_attributes;
 		}
-		struct struct_declaration
+		struct struct_decl
 		{
 			Token*   type_ident;
 			Token*   opt_interface_impl;	// paren
 			AstNode* opt_attributes;
 			Token*   struct_body;		// brace
 		}
-		struct enum_declaration
+		struct enum_decl
 		{
 			Token*   type_ident;
 			Token*   opt_interface_impl;	// paren
@@ -90,7 +90,7 @@ struct AstNode (Printable)
 			AstNode* base_type_no_generics;	// base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
 			Token*   enum_params;		// paren
 		}
-		struct bitstruct_declaration
+		struct bitstruct_decl
 		{
 			Token*   type_ident;
 			Token*   opt_interface_impl;	// paren
@@ -98,17 +98,17 @@ struct AstNode (Printable)
 			AstNode* opt_attributes;
 			Token*   bitstruct_body;	// brace
 		}
-		struct interface_declaration
+		struct interface_decl
 		{
-			AstNode*  interface_declaration_name;
+			AstNode*  interface_decl_name;
 			Token*    interface_body;	// brace
 		}
-		struct interface_declaration_name
+		struct interface_decl_name
 		{
 			Token*    type_ident;
 			TokenList interface_parents;
 		}
-		struct distinct_declaration
+		struct distinct_decl
 		{
 			Token*   type_ident;
 			Token*   opt_interface_impl;	// paren
@@ -133,7 +133,7 @@ struct AstNode (Printable)
 			AstNode* optional_type;
 			Token*   fn_parameter_list;	// paren
 		}
-		struct macro_declaration
+		struct macro_decl
 		{
 			AstNode* macro_header;
 			Token*   macro_params;		// paren
@@ -160,10 +160,10 @@ struct AstNode (Printable)
 			AstNode* opt_attributes;
 			AstList  attribute_comma_list; 	// comma is optional
 		}
-		struct global_declaration
+		struct global_decl
 		{
 			AstNode*  optional_type;
-			TokenList idents;		// covers 'multi_declaration'
+			TokenList idents;		// covers 'multi_decl'
 			AstNode*  opt_attributes;
 			AstNode*  expr;
 		}
@@ -206,7 +206,7 @@ fn void AstNode.free(&self)
 	switch (self.type)
 	{
 		case AST_TRANSLATION_UNIT:
-		case AST_FAULT_DECLARATION:
+		case AST_FAULT_DECL:
 		case AST_OPT_ATTRIBUTES:
 			free_ast_list(&self.ast_list);
 
@@ -227,43 +227,43 @@ fn void AstNode.free(&self)
 			free_tok(self.faults.const_ident);
 			free_ast(self.faults.opt_attributes);
 
-		case AST_STRUCT_DECLARATION:
-			free_tok(self.struct_declaration.type_ident);
-			free_tok(self.struct_declaration.opt_interface_impl);
-			free_ast(self.struct_declaration.opt_attributes);
-			free_tok(self.struct_declaration.struct_body);
+		case AST_STRUCT_DECL:
+			free_tok(self.struct_decl.type_ident);
+			free_tok(self.struct_decl.opt_interface_impl);
+			free_ast(self.struct_decl.opt_attributes);
+			free_tok(self.struct_decl.struct_body);
 
-		case AST_ENUM_DECLARATION:
-			free_tok(self.enum_declaration.type_ident);
-			free_tok(self.enum_declaration.opt_interface_impl);
-			free_ast(self.enum_declaration.enum_spec);
-			free_ast(self.enum_declaration.opt_attributes);
-			free_tok(self.enum_declaration.enum_list);
+		case AST_ENUM_DECL:
+			free_tok(self.enum_decl.type_ident);
+			free_tok(self.enum_decl.opt_interface_impl);
+			free_ast(self.enum_decl.enum_spec);
+			free_ast(self.enum_decl.opt_attributes);
+			free_tok(self.enum_decl.enum_list);
 
 		case AST_ENUM_SPEC:
 			free_ast(self.enum_spec.base_type_no_generics);
 			free_tok(self.enum_spec.enum_params);
 
-		case AST_BITSTRUCT_DECLARATION:
-			free_tok(self.bitstruct_declaration.type_ident);
-			free_tok(self.bitstruct_declaration.opt_interface_impl);
-			free_ast(self.bitstruct_declaration.type_no_generics);
-			free_ast(self.bitstruct_declaration.opt_attributes);
-			free_tok(self.bitstruct_declaration.bitstruct_body);
+		case AST_BITSTRUCT_DECL:
+			free_tok(self.bitstruct_decl.type_ident);
+			free_tok(self.bitstruct_decl.opt_interface_impl);
+			free_ast(self.bitstruct_decl.type_no_generics);
+			free_ast(self.bitstruct_decl.opt_attributes);
+			free_tok(self.bitstruct_decl.bitstruct_body);
 
-		case AST_INTERFACE_DECLARATION:
-			free_ast(self.interface_declaration.interface_declaration_name);
-			free_tok(self.interface_declaration.interface_body);
+		case AST_INTERFACE_DECL:
+			free_ast(self.interface_decl.interface_decl_name);
+			free_tok(self.interface_decl.interface_body);
 
-		case AST_INTERFACE_DECLARATION_NAME:
-			free_tok(self.interface_declaration_name.type_ident);
-			free_tok_list(&self.interface_declaration_name.interface_parents);
+		case AST_INTERFACE_DECL_NAME:
+			free_tok(self.interface_decl_name.type_ident);
+			free_tok_list(&self.interface_decl_name.interface_parents);
 
-		case AST_DISTINCT_DECLARATION:
-			free_tok(self.distinct_declaration.type_ident);
-			free_tok(self.distinct_declaration.opt_interface_impl);
-			free_ast(self.distinct_declaration.opt_attributes);
-			free_ast(self.distinct_declaration.type);
+		case AST_DISTINCT_DECL:
+			free_tok(self.distinct_decl.type_ident);
+			free_tok(self.distinct_decl.opt_interface_impl);
+			free_ast(self.distinct_decl.opt_attributes);
+			free_ast(self.distinct_decl.type);
 
 		case AST_FUNC_DEFINITION:
 			free_ast(self.func_definition.func_header);
@@ -275,10 +275,10 @@ fn void AstNode.free(&self)
 			free_ast(self.func_header.type);
 			free_tok(self.func_header.func_macro_name);
 
-		case AST_MACRO_DECLARATION:
-			free_ast(self.macro_declaration.macro_header);
-			free_tok(self.macro_declaration.macro_params);
-			free_ast(self.macro_declaration.opt_attributes);
+		case AST_MACRO_DECL:
+			free_ast(self.macro_decl.macro_header);
+			free_tok(self.macro_decl.macro_params);
+			free_ast(self.macro_decl.opt_attributes);
 
 		case AST_FUNC_TYPEDEF:
 			free_ast(self.func_typedef.optional_type);
@@ -302,11 +302,11 @@ fn void AstNode.free(&self)
 			free_ast(self.attr_def.opt_attributes);
 			free_ast_list(&self.attr_def.attribute_comma_list);
 
-		case AST_GLOBAL_DECLARATION:
-			free_ast(self.global_declaration.optional_type);
-			free_tok_list(&self.global_declaration.idents);
-			free_ast(self.global_declaration.opt_attributes);
-			free_ast(self.global_declaration.expr);
+		case AST_GLOBAL_DECL:
+			free_ast(self.global_decl.optional_type);
+			free_tok_list(&self.global_decl.idents);
+			free_ast(self.global_decl.opt_attributes);
+			free_ast(self.global_decl.expr);
 
 		case AST_INLINE:
 		case AST_EXTERN:
@@ -362,20 +362,20 @@ fn AstNode*? YadgParser.top_level(&self)
 		switch(self.peek())
 		{
 			case MODULE:    tl = self._module()!;
-			case FAULTDEF:  tl = self.fault_declaration()!;
+			case FAULTDEF:  tl = self.fault_decl()!;
 			case UNION:
-			case STRUCT:    tl = self.struct_declaration()!;
-			case ENUM:      tl = self.enum_declaration()!;
-			case BITSTRUCT: tl = self.bitstruct_declaration()!;
-			case INTERFACE: tl = self.interface_declaration()!;
+			case STRUCT:    tl = self.struct_decl()!;
+			case ENUM:      tl = self.enum_decl()!;
+			case BITSTRUCT: tl = self.bitstruct_decl()!;
+			case INTERFACE: tl = self.interface_decl()!;
 			case FUNC:      tl = self.func_definition()!;
-			case MACRO:     tl = self.macro_declaration()!;
-			case TYPEDEF:   tl = self.distinct_declaration()!;
+			case MACRO:     tl = self.macro_decl()!;
+			case TYPEDEF:   tl = self.distinct_decl()!;
 			case ATTRDEF:
-			case ALIAS:     tl = self.define_declaration()!;
+			case ALIAS:     tl = self.define_decl()!;
 			// case CONST:
 			default:
-				if (try decl = self.global_declaration())
+				if (try decl = self.global_decl())
 				{
 					return decl;
 				}
@@ -589,15 +589,15 @@ fn AstNode*? YadgParser._attribute(&self)
 	return node;
 }
 
-fn AstNode*? YadgParser.fault_declaration(&self)
+fn AstNode*? YadgParser.fault_decl(&self)
 {
 	if (!self.expect(FAULTDEF)!)
 	{
-		self.report_error("fault_declaration: expected a 'FAULTDEF' token");
+		self.report_error("fault_decl: expected a 'FAULTDEF' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_FAULT_DECLARATION);
+	AstNode* node = self.make_node(AST_FAULT_DECL);
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
@@ -610,7 +610,7 @@ fn AstNode*? YadgParser.fault_declaration(&self)
 
 	if (!self.expect(SEMICOLON)!)
 	{
-		self.report_error("fault_declaration: semicolon expected?");
+		self.report_error("fault_decl: semicolon expected?");
 		return INVALID_AST?;
 	}
 
@@ -633,88 +633,88 @@ fn AstNode*? YadgParser.faults(&self)
 	return node;
 }
 
-fn AstNode*? YadgParser.struct_declaration(&self)
+fn AstNode*? YadgParser.struct_decl(&self)
 {
 	if (!self.expect(STRUCT)! && !self.expect(UNION)!)
 	{
-		self.report_error("struct_declaration: expected a 'STRUCT' or 'UNION' token");
+		self.report_error("struct_decl: expected a 'STRUCT' or 'UNION' token");
 		return INVALID_AST?;
 	}
 
 	if (self.peek() != TYPE_IDENT)
 	{
-		self.report_error("struct_declaration: expected a 'TYPE_IDENT' token");
+		self.report_error("struct_decl: expected a 'TYPE_IDENT' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_STRUCT_DECLARATION);
+	AstNode* node = self.make_node(AST_STRUCT_DECL);
 	defer catch node.free();
 
-	node.struct_declaration.type_ident = self.advance()!;
+	node.struct_decl.type_ident = self.advance()!;
 
 	if (self.peek() == PAREN)
 	{
-		node.struct_declaration.opt_interface_impl = self.advance()!;
+		node.struct_decl.opt_interface_impl = self.advance()!;
 	}
 
-	node.struct_declaration.opt_attributes = self.opt_attributes()!;
+	node.struct_decl.opt_attributes = self.opt_attributes()!;
 
 	if (self.peek() != BRACE)
 	{
-		self.report_error("struct_declaration: expected the struct body (a 'BRACE' token)");
+		self.report_error("struct_decl: expected the struct body (a 'BRACE' token)");
 		return INVALID_AST?;
 	}
-	node.struct_declaration.struct_body = self.advance()!;
+	node.struct_decl.struct_body = self.advance()!;
 
 	return node;
 }
 
 <*
-enum_declaration
+enum_decl
 	: ENUM TYPE_IDENT opt_interface_impl enum_spec opt_attributes '{' enum_list '}'
 	| ENUM TYPE_IDENT opt_interface_impl opt_attributes '{' enum_list '}'
 	;
 *>
-fn AstNode*? YadgParser.enum_declaration(&self)
+fn AstNode*? YadgParser.enum_decl(&self)
 {
 	if (!self.expect(ENUM)!)
 	{
-		self.report_error("enum_declaration: expected a 'ENUM' token");
+		self.report_error("enum_decl: expected a 'ENUM' token");
 		return INVALID_AST?;
 	}
 
 	if (self.peek() != TYPE_IDENT)
 	{
-		self.report_error("enum_declaration: expected a 'TYPE_IDENT' token");
+		self.report_error("enum_decl: expected a 'TYPE_IDENT' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_ENUM_DECLARATION);
+	AstNode* node = self.make_node(AST_ENUM_DECL);
 	defer catch node.free();
 
 	// TYPE_IDENT
-	node.enum_declaration.type_ident = self.advance()!;
+	node.enum_decl.type_ident = self.advance()!;
 
 	// opt_interface_impl
 	if (self.peek() == PAREN)
 	{
-		node.enum_declaration.opt_interface_impl = self.advance()!;
+		node.enum_decl.opt_interface_impl = self.advance()!;
 	}
 
 	// enum_spec
 	if (self.expect(COLON)!)
 	{
-		node.enum_declaration.enum_spec = self.enum_spec()!;
+		node.enum_decl.enum_spec = self.enum_spec()!;
 	}
 
-	node.enum_declaration.opt_attributes = self.opt_attributes()!;
+	node.enum_decl.opt_attributes = self.opt_attributes()!;
 
 	if (self.peek() != BRACE)
 	{
-		self.report_error("enum_declaration: expected the enum_list (a 'BRACE' token)");
+		self.report_error("enum_decl: expected the enum_list (a 'BRACE' token)");
 		return INVALID_AST?;
 	}
-	node.enum_declaration.enum_list = self.advance()!;
+	node.enum_decl.enum_list = self.advance()!;
 
 	return node;
 }
@@ -831,53 +831,53 @@ fn bool is_base_type_no_generics(TokenType type)
 }
 
 <*
-bitstruct_declaration
+bitstruct_decl
 	: BITSTRUCT TYPE_IDENT opt_interface_impl ':' type_no_generics opt_attributes bitstruct_body
 	;
 *>
-fn AstNode*? YadgParser.bitstruct_declaration(&self)
+fn AstNode*? YadgParser.bitstruct_decl(&self)
 {
 	if (!self.expect(BITSTRUCT)!)
 	{
-		self.report_error("bitstruct_declaration: expected a 'BITSTRUCT' token");
+		self.report_error("bitstruct_decl: expected a 'BITSTRUCT' token");
 		return INVALID_AST?;
 	}
 
 	if (self.peek() != TYPE_IDENT)
 	{
-		self.report_error("bitstruct_declaration: expected a 'TYPE_IDENT' token");
+		self.report_error("bitstruct_decl: expected a 'TYPE_IDENT' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_BITSTRUCT_DECLARATION);
+	AstNode* node = self.make_node(AST_BITSTRUCT_DECL);
 	defer catch node.free();
 
 	// TYPE_IDENT
-	node.bitstruct_declaration.type_ident = self.advance()!;
+	node.bitstruct_decl.type_ident = self.advance()!;
 
 	// opt_interface_impl
 	if (self.peek() == PAREN)
 	{
-		node.bitstruct_declaration.opt_interface_impl = self.advance()!;
+		node.bitstruct_decl.opt_interface_impl = self.advance()!;
 	}
 
 	if (!self.expect(COLON)!)
 	{
-		self.report_error("bitstruct_declaration: expected a 'COLON' token");
+		self.report_error("bitstruct_decl: expected a 'COLON' token");
 		return INVALID_AST?;
 	}
 
 	// type_no_generics
-	node.bitstruct_declaration.type_no_generics = self.type()!;
+	node.bitstruct_decl.type_no_generics = self.type()!;
 
-	node.bitstruct_declaration.opt_attributes = self.opt_attributes()!;
+	node.bitstruct_decl.opt_attributes = self.opt_attributes()!;
 
 	if (self.peek() != BRACE)
 	{
-		self.report_error("bitstruct_declaration: expected the bitstruct_body (a 'BRACE' token)");
+		self.report_error("bitstruct_decl: expected the bitstruct_body (a 'BRACE' token)");
 		return INVALID_AST?;
 	}
-	node.bitstruct_declaration.bitstruct_body = self.advance()!;
+	node.bitstruct_decl.bitstruct_body = self.advance()!;
 
 	return node;
 }
@@ -1038,35 +1038,35 @@ fn AstNode*? YadgParser.func_type(&self)
 
 
 <*
-interface_declaration
-	: INTERFACE interface_declaration_name '{' '}'
-	| INTERFACE interface_declaration_name '{' interface_body '}'
+interface_decl
+	: INTERFACE interface_decl_name '{' '}'
+	| INTERFACE interface_decl_name '{' interface_body '}'
 	;
 *>
-fn AstNode*? YadgParser.interface_declaration(&self)
+fn AstNode*? YadgParser.interface_decl(&self)
 {
 	if (!self.expect(INTERFACE)!)
 	{
-		self.report_error("interface_declaration: expected a 'INTERFACE' token");
+		self.report_error("interface_decl: expected a 'INTERFACE' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_INTERFACE_DECLARATION);
-	node.interface_declaration.interface_declaration_name = self.interface_declaration_name()!;
+	AstNode* node = self.make_node(AST_INTERFACE_DECL);
+	node.interface_decl.interface_decl_name = self.interface_decl_name()!;
 	defer catch node.free();
 
 	if (self.peek() != BRACE)
 	{
-		self.report_error("interface_declaration: expected the interface_body (a 'BRACE' token)");
+		self.report_error("interface_decl: expected the interface_body (a 'BRACE' token)");
 		return INVALID_AST?;
 	}
-	node.interface_declaration.interface_body = self.advance()!;
+	node.interface_decl.interface_body = self.advance()!;
 
 	return node;
 }
 
 <*
-interface_declaration_name
+interface_decl_name
 	: TYPE_IDENT
 	| TYPE_IDENT ':' interface_parents
 	;
@@ -1077,17 +1077,17 @@ interface_parents
 	;
 
 *>
-fn AstNode*? YadgParser.interface_declaration_name(&self)
+fn AstNode*? YadgParser.interface_decl_name(&self)
 {
 	if (self.peek() != TYPE_IDENT)
 	{
-		self.report_error("interface_declaration_name: expected a 'TYPE_IDENT' token");
+		self.report_error("interface_decl_name: expected a 'TYPE_IDENT' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_INTERFACE_DECLARATION_NAME);
-	node.interface_declaration_name.type_ident = self.advance()!;
-	node.interface_declaration_name.interface_parents.init(self.allocator);
+	AstNode* node = self.make_node(AST_INTERFACE_DECL_NAME);
+	node.interface_decl_name.type_ident = self.advance()!;
+	node.interface_decl_name.interface_parents.init(self.allocator);
 	defer catch node.free();
 
 	// interface_parents
@@ -1096,7 +1096,7 @@ fn AstNode*? YadgParser.interface_declaration_name(&self)
 		// interface_parents as TYPE_IDENT ','
 		while (self.peek() != EOF && self.peek() == TYPE_IDENT)
 		{
-			node.interface_declaration_name.interface_parents.push(self.advance()!);
+			node.interface_decl_name.interface_parents.push(self.advance()!);
 			if (self.expect(COMMA)!) continue;
 		}
 	}
@@ -1176,27 +1176,27 @@ fn AstNode*? YadgParser.func_header(&self)
 }
 
 
-fn AstNode*? YadgParser.macro_declaration(&self)
+fn AstNode*? YadgParser.macro_decl(&self)
 {
 	if (!self.expect(MACRO)!)
 	{
-		self.report_error("macro_declaration: expected a 'MACRO' token");
+		self.report_error("macro_decl: expected a 'MACRO' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_MACRO_DECLARATION);
+	AstNode* node = self.make_node(AST_MACRO_DECL);
 	defer catch node.free();
 
-	node.macro_declaration.macro_header = self.macro_header()!;
+	node.macro_decl.macro_header = self.macro_header()!;
 
 	if (self.peek() != PAREN)
 	{
-		self.report_error("macro_declaration: expected 'macro_params' (a 'PAREN' token)");
+		self.report_error("macro_decl: expected 'macro_params' (a 'PAREN' token)");
 		return INVALID_AST?;
 	}
-	node.macro_declaration.macro_params = self.advance()!;
+	node.macro_decl.macro_params = self.advance()!;
 
-	node.macro_declaration.opt_attributes = self.opt_attributes()!;
+	node.macro_decl.opt_attributes = self.opt_attributes()!;
 
 	// Handle 'macro_func_body'
 	self.macro_func_body()!;
@@ -1208,7 +1208,7 @@ fn void? YadgParser.macro_func_body(&self)
 {
 	switch (self.peek())
 	{
-		case SEMICOLON: // macro_declaration_decl
+		case SEMICOLON: // macro_decl_decl
 		case BRACE:     // Regular func/macro body
 			self.advance()!;
 		case IMPLIES:
@@ -1288,50 +1288,50 @@ fn AstNode*? YadgParser.macro_header(&self)
 }
 
 <*
-distinct_declaration
+distinct_decl
 	: TYPEDEF TYPE_IDENT opt_interface_impl opt_attributes '=' opt_inline type ';'
 	;
 *>
-fn AstNode*? YadgParser.distinct_declaration(&self)
+fn AstNode*? YadgParser.distinct_decl(&self)
 {
 	if (!self.expect(TYPEDEF)!)
 	{
-		self.report_error("distinct_declaration: expected a 'TYPEDEF' token");
+		self.report_error("distinct_decl: expected a 'TYPEDEF' token");
 		return INVALID_AST?;
 	}
 
 	if (self.peek() != TYPE_IDENT)
 	{
-		self.report_error("distinct_declaration: expected a 'TYPE_IDENT' token");
+		self.report_error("distinct_decl: expected a 'TYPE_IDENT' token");
 		return INVALID_AST?;
 	}
 
-	AstNode* node = self.make_node(AST_DISTINCT_DECLARATION);
+	AstNode* node = self.make_node(AST_DISTINCT_DECL);
 	defer catch node.free();
 
-	node.distinct_declaration.type_ident = self.advance()!;
+	node.distinct_decl.type_ident = self.advance()!;
 
 	if (self.peek() == PAREN)
 	{
-		node.distinct_declaration.opt_interface_impl = self.advance()!;
+		node.distinct_decl.opt_interface_impl = self.advance()!;
 	}
 
-	node.distinct_declaration.opt_attributes = self.opt_attributes()!;
+	node.distinct_decl.opt_attributes = self.opt_attributes()!;
 
 	if (!self.expect(ASSIGN)!)
 	{
-		self.report_error("distinct_declaration: expected a 'ASSIGN' token");
+		self.report_error("distinct_decl: expected a 'ASSIGN' token");
 		return INVALID_AST?;
 	}
 
-	node.distinct_declaration.opt_inline = self.expect(INLINE)!;
-	node.distinct_declaration.type = self.type(true, true)!;
+	node.distinct_decl.opt_inline = self.expect(INLINE)!;
+	node.distinct_decl.type = self.type(true, true)!;
 
 	return node;
 }
 
 <*
-define_declaration
+define_decl
 	: ALIAS define_ident ';'
 	| ATTRDEF define_attribute ';'
 	| ALIAS TYPE_IDENT opt_attributes '=' typedef_type opt_attributes ';'
@@ -1372,7 +1372,7 @@ opt_comma
 	| empty
 	;
 *>
-fn AstNode*? YadgParser.define_declaration(&self)
+fn AstNode*? YadgParser.define_decl(&self)
 {
 	if (self.expect(ALIAS)!)
 	{
@@ -1448,7 +1448,7 @@ fn AstNode*? YadgParser.define_declaration(&self)
 
 				return node;
 			default:
-				self.report_error("define_declaration: invalid type after 'alias'");
+				self.report_error("define_decl: invalid type after 'alias'");
 				return INVALID_AST?;
 		}
 
@@ -1488,21 +1488,21 @@ fn AstNode*? YadgParser.define_declaration(&self)
 		}
 		else
 		{
-			self.report_error("define_declaration: expected 'AT_TYPE_IDENT' token after 'attrdef'");
+			self.report_error("define_decl: expected 'AT_TYPE_IDENT' token after 'attrdef'");
 			return INVALID_AST?;
 		}
 	}
 	else
 	{
-		self.report_error("define_declaration: expected either an 'ALIAS' or 'ATTRDEF' token");
+		self.report_error("define_decl: expected either an 'ALIAS' or 'ATTRDEF' token");
 	 	return INVALID_AST?;
 	}
 }
 
 <*
-global_declaration
+global_decl
 	: global_storage optional_type IDENT opt_attributes ';'
-	| global_storage optional_type IDENT multi_declaration opt_attributes ';'
+	| global_storage optional_type IDENT multi_decl opt_attributes ';'
 	| global_storage optional_type IDENT opt_attributes '=' expr ';'
 	;
 
@@ -1511,41 +1511,41 @@ global_storage
 	| empty
 	;
 
-multi_declaration
+multi_decl
 	: ',' IDENT
-	| multi_declaration ',' IDENT
+	| multi_decl ',' IDENT
 	;
 
 *>
-fn AstNode*? YadgParser.global_declaration(&self)
+fn AstNode*? YadgParser.global_decl(&self)
 {
 	if (self.expect(TLOCAL)!)
 	{
-		return self._tlocal(self.global_declaration()!);
+		return self._tlocal(self.global_decl()!);
 	}
 
-	AstNode* node = self.make_node(AST_GLOBAL_DECLARATION);
-	node.global_declaration.idents.init(self.allocator);
+	AstNode* node = self.make_node(AST_GLOBAL_DECL);
+	node.global_decl.idents.init(self.allocator);
 	defer catch node.free();
 
-	node.global_declaration.optional_type = self.optional_type()!;
+	node.global_decl.optional_type = self.optional_type()!;
 
 	while (self.peek() != EOF && self.peek() == IDENT)
 	{
-		node.global_declaration.idents.push(self.advance()!);
+		node.global_decl.idents.push(self.advance()!);
 		if (self.expect(COMMA)!) continue;
 	}
 
-	node.global_declaration.opt_attributes = self.opt_attributes()!;
+	node.global_decl.opt_attributes = self.opt_attributes()!;
 
 	if (self.expect(ASSIGN)!)
 	{
-		node.global_declaration.expr = self.expr()!;
+		node.global_decl.expr = self.expr()!;
 	}
 
 	if (!self.expect(SEMICOLON)!)
 	{
-		self.report_error("global_declaration: expected 'SEMICOLON'");
+		self.report_error("global_decl: expected 'SEMICOLON'");
 		return INVALID_AST?;
 	}
 
