@@ -43,8 +43,10 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	switch (node.type)
 	{
 		case AST_TRANSLATION_UNIT:
-			foreach (top_level : node.translation_unit.top_level_stmts)
-				n += self.visit(top_level)!;
+		case AST_FAULT_DECLARATION:
+		case AST_OPT_ATTRIBUTES:
+			foreach (ast : node.ast_list)
+				n += self.visit(ast)!;
 
 		case AST_TOP_LEVEL:
 			n += write_token(f, prefix, node.top_level.comment)!;
@@ -52,24 +54,16 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 		case AST_TYPE:
 		case AST_PATH:
-			n += write_token_list(f, prefix, node.list)!;
+			n += write_token_list(f, prefix, node.tok_list)!;
 
 		case AST_MODULE:
 			n += self.visit(node._module.path_ident)!;
 			n += write_token(f, prefix, node._module.module_params)!;
 			n += self.visit(node._module.opt_attributes)!;
 
-		case AST_FAULT_DECLARATION:
-			foreach (top_level : node.translation_unit.top_level_stmts)
-				n += self.visit(top_level)!;
-
 		case AST_FAULTS:
 			n += write_token(f, prefix, node.faults.const_ident)!;
 			n += self.visit(node.faults.opt_attributes)!;
-
-		case AST_OPT_ATTRIBUTES:
-			foreach (attr : node.alist)
-				n += self.visit(attr)!;
 
 		case AST_ATTRIBUTE:
 			n += write_token(f, prefix, node._attribute.attribute_name)!;

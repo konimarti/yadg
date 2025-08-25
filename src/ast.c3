@@ -25,11 +25,9 @@ enum AstType
 	AST_CONST,
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
+	AST_FUNC_TYPEDEF,
 	AST_MACRO_DECLARATION,
 	AST_DISTINCT_DECLARATION,
-
-	// NEW
-	AST_FUNC_TYPEDEF,
 	AST_ALIAS_DEFINE_IDENT,
 	AST_ALIAS_TYPE_IDENT,
 	AST_ATTRIBUTE_DEF,
@@ -47,10 +45,6 @@ struct AstNode (Printable)
 	AstType type;
 	union
 	{
-		struct translation_unit
-		{
-			AstList top_level_stmts;
-		}
 		struct top_level
 		{
 			Token*   comment;
@@ -66,10 +60,6 @@ struct AstNode (Printable)
 		{
 			Token* attribute_name;
 			Token* attribute_param;
-		}
-		struct fault_declaration
-		{
-			AstList faults;
 		}
 		struct faults
 		{
@@ -168,8 +158,8 @@ struct AstNode (Printable)
 		}
 
 		AstNode*  child; // inline, extern
-		TokenList list;  // type, optional_type
-		AstList   alist; // opt_attributes
+		TokenList tok_list;  // type, optional_type
+		AstList   ast_list; // opt_attributes
 	}
 }
 
@@ -181,20 +171,20 @@ fn AstNode* YadgParser.make_node(&self, AstType type)
 	return node;
 }
 
-fn void free_tok(Token* tok)
+fn void free_tok(Token* tok) @local
 {
 	if (tok) tok.free();
 }
-fn void free_ast(AstNode* n)
+fn void free_ast(AstNode* n) @local
 {
 	if (n) n.free();
 }
-fn void free_tok_list(TokenList* l)
+fn void free_tok_list(TokenList* l) @local
 {
 	foreach (n : l) free_tok(n);
 	l.free();
 }
-fn void free_ast_list(AstList* l)
+fn void free_ast_list(AstList* l) @local
 {
 	foreach (n : l) free_ast(n);
 	l.free();
@@ -205,7 +195,9 @@ fn void AstNode.free(&self)
 	switch (self.type)
 	{
 		case AST_TRANSLATION_UNIT:
-			free_ast_list(&self.translation_unit.top_level_stmts);
+		case AST_FAULT_DECLARATION:
+		case AST_OPT_ATTRIBUTES:
+			free_ast_list(&self.ast_list);
 
 		case AST_TOP_LEVEL:
 			free_tok(self.top_level.comment);
@@ -219,9 +211,6 @@ fn void AstNode.free(&self)
 		case AST_ATTRIBUTE:
 			free_tok(self._attribute.attribute_name);
 			free_tok(self._attribute.attribute_param);
-
-		case AST_FAULT_DECLARATION:
-			free_ast_list(&self.translation_unit.top_level_stmts);
 
 		case AST_FAULTS:
 			free_tok(self.faults.const_ident);
@@ -309,10 +298,8 @@ fn void AstNode.free(&self)
 
 		case AST_TYPE:
 		case AST_PATH:
-			free_tok_list(&self.list);
+			free_tok_list(&self.tok_list);
 
-		case AST_OPT_ATTRIBUTES:
-			free_ast_list(&self.alist);
 
 	}
 }
@@ -320,15 +307,16 @@ fn void AstNode.free(&self)
 fn AstNode*? YadgParser.translation_unit(&self)
 {
 	AstNode* node = self.make_node(AST_TRANSLATION_UNIT);
-	node.translation_unit.top_level_stmts.init(self.allocator);
+	node.ast_list.init(self.allocator);
+	defer catch node.free();
 
-	AstNode* top_level;
+	AstNode* top_level_stmt;
 	while (!self.expect(EOF)!)
 	{
-		top_level = self.top_level()!;
-		if (top_level)
+		top_level_stmt = self.top_level()!;
+		if (top_level_stmt)
 		{
-			node.translation_unit.top_level_stmts.push(top_level);
+			node.ast_list.push(top_level_stmt);
 		}
 	}
 
@@ -454,13 +442,13 @@ FIXME: this is more like 'path_ident'
 fn AstNode*? YadgParser.path(&self)
 {
 	AstNode* node = self.make_node(AST_PATH);
-	node.list.init(self.allocator);
-	defer catch node.list.free();
+	node.tok_list.init(self.allocator);
+	defer catch node.free();
 
 	// path_ident
 	while (self.peek() != EOF && self.peek() == IDENT)
 	{
-		node.list.push(self.advance()!);
+		node.tok_list.push(self.advance()!);
 		if (self.expect(SCOPE)!) continue;
 	}
 
@@ -484,12 +472,12 @@ path_const
 fn AstNode*? YadgParser.path_const(&self)
 {
 	AstNode* path = self.path()!;
+	defer catch path.free();
 	if (self.peek() != CONST_IDENT)
 	{
-		path.free();
 		return INVALID_PATH?;
 	}
-	path.list.push(self.advance()!);
+	path.tok_list.push(self.advance()!);
 	return path;
 }
 
@@ -502,12 +490,12 @@ path_at_ident
 fn AstNode*? YadgParser.path_at_ident(&self)
 {
 	AstNode* path = self.path()!;
+	defer catch path.free();
 	if (self.peek() != AT_IDENT)
 	{
-		path.free();
 		return INVALID_PATH?;
 	}
-	path.list.push(self.advance()!);
+	path.tok_list.push(self.advance()!);
 	return path;
 }
 <*
@@ -530,12 +518,12 @@ attribute
 fn AstNode*? YadgParser.opt_attributes(&self)
 {
 	AstNode* node = self.make_node(AST_OPT_ATTRIBUTES);
-	node.alist.init(self.allocator);
+	node.ast_list.init(self.allocator);
 
-	defer catch node.alist.free();
+	defer catch node.free();
 
 	AstNode *ptr;
-	while ((ptr = self._attribute()!) && ptr) node.alist.push(ptr);
+	while ((ptr = self._attribute()!) && ptr) node.ast_list.push(ptr);
 
 	return node;
 }
@@ -585,13 +573,13 @@ fn AstNode*? YadgParser.fault_declaration(&self)
 	}
 
 	AstNode* node = self.make_node(AST_FAULT_DECLARATION);
-	node.fault_declaration.faults.init(self.allocator);
-	defer catch node.fault_declaration.faults.free();
+	node.ast_list.init(self.allocator);
+	defer catch node.free();
 
 	AstNode *ptr;
 	while ((ptr = self.faults()!) && ptr)
 	{
-		node.fault_declaration.faults.push(ptr);
+		node.ast_list.push(ptr);
 		if (!self.expect(COMMA)!) break;
 	}
 
@@ -614,11 +602,9 @@ fn AstNode*? YadgParser.faults(&self)
 	if (self.peek() != CONST_IDENT) return null;
 
 	AstNode* node = self.make_node(AST_FAULTS);
+	defer catch node.free();
 	node.faults.const_ident = self.advance()!;
-	defer catch node.faults.opt_attributes.free();
-
 	node.faults.opt_attributes = self.opt_attributes()!;
-
 	return node;
 }
 
@@ -637,7 +623,7 @@ fn AstNode*? YadgParser.struct_declaration(&self)
 	}
 
 	AstNode* node = self.make_node(AST_STRUCT_DECLARATION);
-	defer catch node.struct_declaration.opt_attributes.free();
+	defer catch node.free();
 
 	node.struct_declaration.type_ident = self.advance()!;
 
@@ -679,7 +665,7 @@ fn AstNode*? YadgParser.enum_declaration(&self)
 	}
 
 	AstNode* node = self.make_node(AST_ENUM_DECLARATION);
-	defer catch node.enum_declaration.opt_attributes.free();
+	defer catch node.free();
 
 	// TYPE_IDENT
 	node.enum_declaration.type_ident = self.advance()!;
@@ -757,7 +743,7 @@ fn AstNode*? YadgParser.enum_spec(&self)
 	if (self.expect(CONST)!) return self._const(self.enum_spec());
 
 	AstNode* node = self.make_node(AST_ENUM_SPEC);
-	defer catch node.enum_spec.base_type_no_generics.free();
+	defer catch node.free();
 
 	// base_type_no_generics
 	node.enum_spec.base_type_no_generics = self.type(false, false)!;
@@ -832,10 +818,7 @@ fn AstNode*? YadgParser.bitstruct_declaration(&self)
 	}
 
 	AstNode* node = self.make_node(AST_BITSTRUCT_DECLARATION);
-	defer catch {
-		node.bitstruct_declaration.type_no_generics.free();
-		node.bitstruct_declaration.opt_attributes.free();
-	}
+	defer catch node.free();
 
 	// TYPE_IDENT
 	node.bitstruct_declaration.type_ident = self.advance()!;
@@ -902,11 +885,11 @@ type_suffix
 fn AstNode*? YadgParser.type(&self, bool type_suffix = true, bool generic_params = false)
 {
 	AstNode* node = self.make_node(AST_TYPE);
-	node.list.init(self.allocator);
+	node.tok_list.init(self.allocator);
 
 	defer catch {
-		while (node.list.len()) self.push_back(node.list.pop()!!);
-		node.list.free();
+		while (node.tok_list.len()) self.push_back(node.tok_list.pop()!!);
+		node.free();
 	}
 
 	//  base_type_no_generics
@@ -915,23 +898,23 @@ fn AstNode*? YadgParser.type(&self, bool type_suffix = true, bool generic_params
 	{
 		case is_base_type_no_generics(tok_type):
 		case tok_type == TYPE_IDENT:
-			node.list.push(self.advance()!);
+			node.tok_list.push(self.advance()!);
 			switch (tok_type)
 			{
 				case CT_TYPEOF:
 				case CT_TYPEFROM:
 				case CT_VATYPE:
 				case CT_EVALTYPE:
-					node.list.push(self.advance()!);
+					node.tok_list.push(self.advance()!);
 				default:
 			}
 		case tok_type == IDENT:
 			// { IDENT SCOPE } TYPE_IDENT
 			AstNode* path = self.path()!;
-			foreach (ptok : path.list) node.list.push(ptok);
+			foreach (ptok : path.tok_list) node.tok_list.push(ptok);
 			path.free();
 			if (self.peek() != TYPE_IDENT) return INVALID_TYPE?;
-			node.list.push(self.advance()!);
+			node.tok_list.push(self.advance()!);
 		case tok_type == AT_IDENT:
 			return INVALID_TYPE?;
 	}
@@ -939,7 +922,7 @@ fn AstNode*? YadgParser.type(&self, bool type_suffix = true, bool generic_params
 	//  opt_generics_param
 	if (generic_params)
 	{
-		if (self.peek() == BRACE) node.list.push(self.advance()!);
+		if (self.peek() == BRACE) node.tok_list.push(self.advance()!);
 	}
 
 	//  type_suffix
@@ -951,7 +934,7 @@ fn AstNode*? YadgParser.type(&self, bool type_suffix = true, bool generic_params
 			{
 				case STAR:
 				case BRACK:
-					node.list.push(self.advance()!);
+					node.tok_list.push(self.advance()!);
 					continue;
 				default:
 					break TYPE_SUFFIX;
@@ -972,7 +955,7 @@ fn AstNode*? YadgParser.optional_type(&self)
 	AstNode *node = self.type(true, true)!;
 	if (self.peek() == QUESTION)
 	{
-		node.list.push(self.advance()!);
+		node.tok_list.push(self.advance()!);
 	}
 	return node;
 }
@@ -1007,7 +990,7 @@ fn AstNode*? YadgParser.func_type(&self)
 	}
 
 	AstNode* node = self.make_node(AST_FUNC_TYPEDEF);
-	defer catch allocator::free(self.allocator, node);
+	defer catch node.free();
 
 	node.func_typedef.optional_type = self.optional_type()!;
 
@@ -1038,7 +1021,7 @@ fn AstNode*? YadgParser.interface_declaration(&self)
 
 	AstNode* node = self.make_node(AST_INTERFACE_DECLARATION);
 	node.interface_declaration.interface_declaration_name = self.interface_declaration_name()!;
-	defer catch allocator::free(self.allocator, node);
+	defer catch node.free();
 
 	if (self.peek() != BRACE)
 	{
@@ -1073,10 +1056,7 @@ fn AstNode*? YadgParser.interface_declaration_name(&self)
 	AstNode* node = self.make_node(AST_INTERFACE_DECLARATION_NAME);
 	node.interface_declaration_name.type_ident = self.advance()!;
 	node.interface_declaration_name.interface_parents.init(self.allocator);
-	defer catch {
-		node.interface_declaration_name.interface_parents.free();
-		allocator::free(self.allocator, node);
-	}
+	defer catch node.free();
 
 	// interface_parents
 	if (self.expect(COLON)!)
@@ -1111,10 +1091,7 @@ fn AstNode*? YadgParser.func_definition(&self)
 	}
 
 	AstNode* node = self.make_node(AST_FUNC_DEFINITION);
-	defer catch {
-		node.func_definition.opt_attributes.free();
-		allocator::free(self.allocator, node);
-	}
+	defer catch node.free();
 
 	node.func_definition.func_header = self.func_header()!;
 
@@ -1137,11 +1114,7 @@ fn AstNode*? YadgParser.func_definition(&self)
 fn AstNode*? YadgParser.func_header(&self)
 {
 	AstNode* node = self.make_node(AST_FUNC_HEADER);
-	defer catch {
-		node.func_header.optional_type.free();
-		node.func_header.type.free();
-		allocator::free(self.allocator, node);
-	}
+	defer catch node.free();
 
 	// We can have two cases:
 	// 	1.) mod::String? trim
@@ -1180,10 +1153,7 @@ fn AstNode*? YadgParser.macro_declaration(&self)
 	}
 
 	AstNode* node = self.make_node(AST_MACRO_DECLARATION);
-	defer catch {
-		node.macro_declaration.opt_attributes.free();
-		allocator::free(self.allocator, node);
-	}
+	defer catch node.free();
 
 	node.macro_declaration.macro_header = self.macro_header()!;
 
@@ -1240,11 +1210,7 @@ func_header
 fn AstNode*? YadgParser.macro_header(&self)
 {
 	AstNode* node = self.make_node(AST_FUNC_HEADER);
-	defer catch {
-		node.func_header.optional_type.free();
-		node.func_header.type.free();
-		allocator::free(self.allocator, node);
-	}
+	defer catch node.free();
 
 	// We can have four cases:
 	// 	1.) trim
@@ -1309,11 +1275,7 @@ fn AstNode*? YadgParser.distinct_declaration(&self)
 	}
 
 	AstNode* node = self.make_node(AST_DISTINCT_DECLARATION);
-	defer catch {
-		node.distinct_declaration.opt_attributes.free();
-		node.distinct_declaration.type.free();
-		allocator::free(self.allocator, node);
-	}
+	defer catch node.free();
 
 	node.distinct_declaration.type_ident = self.advance()!;
 
@@ -1465,7 +1427,7 @@ fn AstNode*? YadgParser.define_declaration(&self)
 			// attr_def
 			AstNode* node = self.make_node(AST_ATTRIBUTE_DEF);
 			node.attr_def.attribute_comma_list.init(self.allocator);
-			defer catch node.attr_def.attribute_comma_list.free();
+			defer catch node.free();
 
 			node.attr_def.at_type_ident = self.advance()!;
 			if (self.peek() == PAREN)
