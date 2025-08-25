@@ -63,8 +63,9 @@ struct AstNode (Printable)
 		}
 		struct _attribute
 		{
-			Token* attribute_name;
-			Token* attribute_param;
+			AstNode* path_at_type;
+			Token*   attribute_name;
+			Token*   attribute_param;
 		}
 		struct faults
 		{
@@ -228,6 +229,7 @@ fn void AstNode.free(&self)
 			free_ast(self._module.opt_attributes);
 
 		case AST_ATTRIBUTE:
+			free_ast(self._attribute.path_at_type);
 			free_tok(self._attribute.attribute_name);
 			free_tok(self._attribute.attribute_param);
 
@@ -478,7 +480,8 @@ path
 	| path IDENT SCOPE
 	;
 
-FIXME: this is more like 'path_ident'
+Note: This is not exactly like the grammer above but will read a terminal IDENT
+as well.
 *>
 fn AstNode*? YadgParser.path(&self)
 {
@@ -539,6 +542,25 @@ fn AstNode*? YadgParser.path_at_ident(&self)
 	path.tok_list.push(self.advance()!);
 	return path;
 }
+
+<*
+path_at_type_ident
+	: path AT_TYPE_IDENT
+	| AT_TYPE_IDENT
+	;
+*>
+fn AstNode*? YadgParser.path_at_type_ident(&self)
+{
+	AstNode* path = self.path()!;
+	defer catch path.free();
+	if (self.peek() != AT_TYPE_IDENT)
+	{
+		return INVALID_PATH?;
+	}
+	path.tok_list.push(self.advance()!);
+	return path;
+}
+
 <*
 opt_attributes
 	: attribute_list
@@ -571,7 +593,6 @@ fn AstNode*? YadgParser.opt_attributes(&self)
 
 <*
  Returns an Attribute node or null if no attribute was found.
- FIXME: Handle 'path AT_TYPE_IDENT'
 
 attribute
 	: attribute_name
@@ -586,6 +607,11 @@ attribute_name
 *>
 fn AstNode*? YadgParser._attribute(&self)
 {
+	AstNode* path;
+	if (self.peek() == IDENT)
+	{
+		path = self.path_at_type_ident()!;
+	}
 	if (self.peek() != AT_IDENT && self.peek() != AT_TYPE_IDENT)
 	{
 		return null;
@@ -600,6 +626,7 @@ fn AstNode*? YadgParser._attribute(&self)
 	}
 
 	AstNode* node = self.make_node(AST_ATTRIBUTE);
+	node._attribute.path_at_type = path;
 	node._attribute.attribute_name = name;
 	node._attribute.attribute_param = param;
 	return node;

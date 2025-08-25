@@ -62,6 +62,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += self.visit(node.faults.opt_attributes)!;
 
 		case AST_ATTRIBUTE:
+			n += self.visit(node._attribute.path_at_type)!;
 			n += write_token(f, prefix, node._attribute.attribute_name)!;
 			n += write_token(f, prefix, node._attribute.attribute_param)!;
 
