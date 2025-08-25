@@ -821,7 +821,7 @@ fn AstNode*? YadgParser.enum_spec(&self)
 	defer catch node.free();
 
 	// base_type_no_generics
-	node.enum_spec.base_type_no_generics = self.type(false, false)!;
+	node.enum_spec.base_type_no_generics = self.base_type_no_generics()!;
 
 	// enum_params
 	if (self.peek() == PAREN)
@@ -911,7 +911,7 @@ fn AstNode*? YadgParser.bitstruct_decl(&self)
 	}
 
 	// type_no_generics
-	node.bitstruct_decl.type_no_generics = self.type()!;
+	node.bitstruct_decl.type_no_generics = self.type_no_generics()!;
 
 	node.bitstruct_decl.opt_attributes = self.opt_attributes()!;
 
@@ -957,7 +957,7 @@ type_suffix
         | LVEC '*' RVEC
         ;
 *>
-fn AstNode*? YadgParser.type(&self, bool type_suffix = true, bool generic_params = false)
+fn AstNode*? YadgParser.parse_type(&self, bool type_suffix = true, bool generic_params = false)
 {
 	AstNode* node = self.make_node(AST_TYPE);
 	node.tok_list.init(self.allocator);
@@ -1018,6 +1018,10 @@ fn AstNode*? YadgParser.type(&self, bool type_suffix = true, bool generic_params
 	}
 	return node;
 }
+fn AstNode*? YadgParser.base_type(&self) => self.parse_type(false, true);
+fn AstNode*? YadgParser.type_no_generics(&self) => self.parse_type(true, false);
+fn AstNode*? YadgParser.base_type_no_generics(&self) => self.parse_type(false, false);
+fn AstNode*? YadgParser.type(&self) => self.parse_type(true, true);
 
 <*
 optional_typnode
@@ -1027,7 +1031,7 @@ optional_typnode
 *>
 fn AstNode*? YadgParser.optional_type(&self)
 {
-	AstNode *node = self.type(true, true)!;
+	AstNode *node = self.type()!;
 	if (self.peek() == QUESTION)
 	{
 		node.tok_list.push(self.advance()!);
@@ -1048,7 +1052,7 @@ func_typedef
 fn AstNode*? YadgParser.typedef_type(&self)
 {
 	if (self.peek() == FUNC) return self.func_type()!;
-	return self.type(true, true)!;
+	return self.type()!;
 }
 
 <*
@@ -1197,7 +1201,7 @@ fn AstNode*? YadgParser.func_header(&self)
 
 	node.func_header.optional_type = self.optional_type()!;
 
-	AstNode*? type = self.type(true, true);
+	AstNode*? type = self.type();
 	if (catch type)
 	{
 		node.func_header.func_macro_name = self.advance()!;
@@ -1309,7 +1313,7 @@ fn AstNode*? YadgParser.macro_header(&self)
 		return node; // Case 2
 	}
 
-	AstNode*? type = self.type(true, true);
+	AstNode*? type = self.type();
 	if (catch type)
 	{
 		node.func_header.func_macro_name = self.advance()!;
@@ -1368,7 +1372,7 @@ fn AstNode*? YadgParser.distinct_decl(&self)
 	}
 
 	node.distinct_decl.opt_inline = self.expect(INLINE)!;
-	node.distinct_decl.type = self.type(true, true)!;
+	node.distinct_decl.type = self.type()!;
 
 	return node;
 }
