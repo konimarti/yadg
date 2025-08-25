@@ -12,23 +12,50 @@ enum TokenType : ushort
 
 	// Operators
 	TILDE,
-	QUESTION,
-	EMPTYOPT,
 	XOR,
 	BANG,
-	BANGBANG,
-	AND,
-	ANDAND,
-	OR,
-	OROR,
 	PLUS,
 	MINUS,
 	STAR,
 	DIV,
-	MODULUS,
-	RSHIFT,
-	LSHIFT,
+	MOD,
+	QUESTION,	// ?
+	OPTELSE, 	// ??
+	ELVIS, 		// ?:
+	BANGBANG,	// !!
+	BUILTIN, 	// $$
+
+	// Assignment
 	ASSIGN,
+	SHR_ASSIGN,	//>>=
+	SHL_ASSIGN,	//<<=
+	ADD_ASSIGN,	//+=
+	SUB_ASSIGN,	//-=
+	MUL_ASSIGN,	//*=
+	DIV_ASSIGN,	///=
+	MOD_ASSIGN,	//%=
+	AND_ASSIGN,	//&=
+	XOR_ASSIGN,	//^=
+	OR_ASSIGN,	//|=
+
+	// Comparison
+	AND,
+	OR,
+	LESS,
+	GREATER,
+	SHR_OP,		//>>
+	SHL_OP,		//<<
+	INC_OP,		//++
+	DEC_OP,		//--
+	AND_OP,		//&&
+	OR_OP,		//||
+	LE_OP,		//<=
+	GE_OP,		//>=
+	EQ_OP,		//==
+	NE_OP,		//!=
+	CT_AND_OP,
+	CT_OR_OP,
+	CT_CONCAT_OP,
 
 	// Punctuation
 	SEMICOLON,
@@ -36,6 +63,8 @@ enum TokenType : ushort
 	SCOPE,
 	COMMA,
 	DOT,
+	DOTDOT,
+	ELLIPSIS,
 
 	// Structure
 	// LBRACE,
@@ -49,12 +78,6 @@ enum TokenType : ushort
 	BRACK, // []
 	IMPLIES, // =>
 
-	// Comparison
-	EQUAL,
-	LESS,
-	LESSEQ,
-	GREATER,
-	GREATEREQ,
 
 	// Comments and Contracts
 	CONTRACT,  // <* *>
@@ -72,26 +95,49 @@ enum TokenType : ushort
 	TYPE_IDENT,
 
 	// Keywords
-	TLOCAL,
-	EXTERN,
-	INLINE,
-	STRUCT,
-	UNION,
-	ENUM,
-	MODULE,
-	BITSTRUCT,
-	FAULTDEF,
-	INTERFACE,
 
 	ALIAS,
+	ASM,
+	ASSERT,
 	ATTRDEF,
+	BITSTRUCT,
 	CONST,
+	ENUM,
+	FAULTDEF,
 	FUNC,
 	IMPORT,
+	INTERFACE,
 	MACRO,
+	MODULE,
+	STRUCT,
+	UNION,
 	TYPEDEF,
 
-	KEYWORD, // Reserved
+	BREAK,
+	CASE,
+	CATCH,
+	CONTINUE,
+	DEFAULT,
+	DEFER,
+	DO,
+	ELSE,
+	EXTERN,
+	FALSE,
+	FOR,
+	FOREACH,
+	FOREACH_R,
+	IF,
+	INLINE,
+	NEXTCASE,
+	NUL,
+	RETURN,
+	STATIC,
+	SWITCH,
+	TLOCAL,
+	TRUE,
+	TRY,
+	VAR,
+	WHILE,
 
 	// Base Types (base_type_no_generic)
 	VOID,
@@ -343,19 +389,81 @@ fn Token*? Lexer._next(&self) @private => @pool()
 	{
 		case ';': self.advance()!; return self.emit_token(SEMICOLON);
 		case ',': self.advance()!; return self.emit_token(COMMA);
-		case '.': self.advance()!; return self.emit_token(DOT);
-		case '+': self.advance()!; return self.emit_token(PLUS);
-		case '*': self.advance()!; return self.emit_token(STAR);
-		case '%': self.advance()!; return self.emit_token(MODULUS);
 		case '~': self.advance()!; return self.emit_token(TILDE);
-		case '^': self.advance()!; return self.emit_token(XOR);
-		case '-':
-			self.advance()!; // Consuem '-'
-			TokenType type = MINUS;
+		case '^':
+			self.advance()!;
+			TokenType type;
+			switch (self.peek()!)
+			{
+				case '=': self.advance()!; type = XOR_ASSIGN;
+				default: type = XOR;
+			}
+			return self.emit_token(type);
+		case '*':
+			self.advance()!;
+			TokenType type;
+			switch (self.peek()!)
+			{
+				case '=': self.advance()!; type = MUL_ASSIGN;
+				default: type = STAR;
+			}
+			return self.emit_token(type);
+		case '%':
+			self.advance()!;
+			TokenType type;
+			switch (self.peek()!)
+			{
+				case '=': self.advance()!; type = MOD_ASSIGN;
+				default: type = MOD;
+			}
+			return self.emit_token(type);
+		case '.':
+			self.advance()!;
+			TokenType type = DOT;
+			if (self.peek()! == '.')
+			{
+				self.advance()!;
+				type = DOTDOT;
+				if (self.peek()! == '.')
+				{
+					self.advance()!;
+					type = ELLIPSIS;
+				}
+			}
+			return self.emit_token(type);
+		case '+':
+			self.advance()!; // Consume '+'
 			if (is_digit(self.peek()!))
 			{
 				self.pushback(c);
 				return self.lex_number()!;
+			}
+			TokenType type;
+			switch (self.peek()!)
+			{
+				case '+':
+					self.advance()!; type = INC_OP;
+					if (self.peek()! == '+')
+					{
+						self.advance()!; type = CT_CONCAT_OP;
+					}
+				case '=': self.advance()!; type = ADD_ASSIGN;
+				default: type = PLUS;
+			}
+			return self.emit_token(type);
+		case '-':
+			self.advance()!; // Consume '-'
+			if (is_digit(self.peek()!))
+			{
+				self.pushback(c);
+				return self.lex_number()!;
+			}
+			TokenType type;
+			switch (self.peek()!)
+			{
+				case '-': self.advance()!; type = DEC_OP;
+				case '=': self.advance()!; type = SUB_ASSIGN;
+				default: type = MINUS;
 			}
 			return self.emit_token(type);
 		case ':':
@@ -368,39 +476,55 @@ fn Token*? Lexer._next(&self) @private => @pool()
 			}
 			return self.emit_token(type);
 		case '!':
-			self.advance()!; // Consuem '!'
-			TokenType type = BANG;
-			if (self.peek()! == '!')
+			self.advance()!; // Consuem '?'
+			TokenType type;
+			switch (self.peek()!)
 			{
-				self.advance()!; // Consume '!'
-				type = BANGBANG;
+				case '!': self.advance()!; type = BANGBANG;
+				case '=': self.advance()!; type = NE_OP;
+				default: type = BANG;
 			}
 			return self.emit_token(type);
 		case '?':
 			self.advance()!; // Consuem '?'
-			TokenType type = QUESTION;
-			if (self.peek()! == '?')
+			TokenType type;
+			switch (self.peek()!)
 			{
-				self.advance()!; // Consume '?'
-				type = EMPTYOPT;
+				case '?': self.advance()!; type = OPTELSE;
+				case ':': self.advance()!; type = ELVIS;
+				default: type = QUESTION;
 			}
 			return self.emit_token(type);
 		case '|':
-			self.advance()!; // Consume '|'
-			TokenType type = OR;
-			if (self.peek()! == '|')
+			self.advance()!; // Consuem '|'
+			TokenType type;
+			switch (self.peek()!)
 			{
-				self.advance()!; // Consume '|'
-				type = OROR;
+				case '|':
+					self.advance()!; type = OR_OP;
+					if (self.peek()! == '|')
+					{
+						self.advance()!;
+						type = CT_OR_OP;
+					}
+				case '=': self.advance()!; type = OR_ASSIGN;
+				default: type = OR;
 			}
 			return self.emit_token(type);
 		case '&':
 			self.advance()!; // Consuem '&'
-			TokenType type = AND;
-			if (self.peek()! == '&')
+			TokenType type;
+			switch (self.peek()!)
 			{
-				self.advance()!; // Consume '&'
-				type = ANDAND;
+				case '&':
+					self.advance()!; type = AND_OP;
+					if (self.peek()! == '&')
+					{
+						self.advance()!;
+						type = CT_AND_OP;
+					}
+				case '=': self.advance()!; type = AND_ASSIGN;
+				default: type = AND;
 			}
 			return self.emit_token(type);
 		case '=':
@@ -409,7 +533,7 @@ fn Token*? Lexer._next(&self) @private => @pool()
 			switch (self.peek()!)
 			{
 				case '>': self.advance()!; type = IMPLIES;
-				case '=': self.advance()!; type = EQUAL;
+				case '=': self.advance()!; type = EQ_OP;
 				default : type = ASSIGN;
 			}
 			return self.emit_token(type);
@@ -418,8 +542,13 @@ fn Token*? Lexer._next(&self) @private => @pool()
 			TokenType type;
 			switch (self.peek()!)
 			{
-				case '>': self.advance()!; type = RSHIFT;
-				case '=': self.advance()!; type = GREATEREQ;
+				case '>':
+					self.advance()!; type = SHR_OP;
+					if (self.peek()! == '=')
+					{
+						self.advance()!; type = SHR_ASSIGN;
+					}
+				case '=': self.advance()!; type = GE_OP;
 				default : type = GREATER;
 			}
 			return self.emit_token(type);
@@ -427,14 +556,14 @@ fn Token*? Lexer._next(&self) @private => @pool()
 		// case '{': self.advance()!; return self.emit_token(LBRACE);
 		// case '(': self.advance()!; return self.emit_token(LPAREN);
 		// case '[': self.advance()!; return self.emit_token(LBRACK);
+		//       '[<' --> LVEC
 		// case '}': self.advance()!; return self.emit_token(RBRACE);
 		// case ')': self.advance()!; return self.emit_token(RPAREN);
 		// case ']': self.advance()!; return self.emit_token(RBRACK);
+		//       '>]' --> RVEC
 		case '{': return self.lex_brace();
 		case '(': return self.lex_paren();
 		case '[': return self.lex_brack();
-
-		case '@': return self.lex_attribute();
 
 		// Don't emit line or block comments, only scan them.
 		//case '/': return self.lex_comment()!;
@@ -454,11 +583,13 @@ fn Token*? Lexer._next(&self) @private => @pool()
 						self.scan_block_comment(tmem)!;
 					};
 					return self._next();;
+				case '=': self.advance()!; return self.emit_token(DIV_ASSIGN);
 				default: return self.emit_token(DIV);
 			}
 
 		case '<': return self.lex_contract()!;
 		case '$': return self.lex_compile_time()!;
+		case '@': return self.lex_attribute();
 		case '"':
 		case '\'':
 		case '`':
@@ -600,22 +731,21 @@ fn Token*? Lexer.lex_contract(&self)
 
 	self.advance()!; // Consume '<';
 
-	if (self.peek()! == '<')
+	TokenType type = EMPTY;
+	switch (self.peek()!)
 	{
-		self.advance()!;
-		return self.emit_token(LSHIFT);
-	}
-	if (self.peek()! == '=')
-	{
-		self.advance()!;
-		return self.emit_token(LESSEQ);
-	}
-	if (self.peek()! != '*')
-	{
-		return self.emit_token(LESS);
+		case '*': self.advance()!; type = CONTRACT;
+		case '<':
+			self.advance()!; type = SHL_OP;
+			if (self.peek()! == '=')
+			{
+				self.advance()!; type = SHL_ASSIGN;
+			}
+		case '=': self.advance()!; type = LE_OP;
+		default: type = LESS;
 	}
 
-	self.advance()!; // Consume '*';
+	if (type != CONTRACT) return self.emit_token(type);
 
 	while LOOP: (c = self.peek()!)
 	{
@@ -697,31 +827,52 @@ fn Token*? Lexer.lex_ident(&self) => @pool()
 	switch (str)
 	{
 		// Explicit Keywords
+		case "alias":     return self.emit_token(ALIAS, str);
+		case "any":       return self.emit_token(ANY, str);
+		case "asm":       return self.emit_token(ASM, str);
+		case "assert":    return self.emit_token(ASSERT, str);
+		case "attrdef":   return self.emit_token(ATTRDEF, str);
+		case "bitstruct": return self.emit_token(BITSTRUCT, str);
+		case "const":     return self.emit_token(CONST, str);
+		case "enum":      return self.emit_token(ENUM, str);
+		case "faultdef":  return self.emit_token(FAULTDEF, str);
 		case "fn":        return self.emit_token(FUNC, str);
+		case "import":    return self.emit_token(IMPORT, str);
+		case "interface": return self.emit_token(INTERFACE, str);
 		case "macro":     return self.emit_token(MACRO, str);
 		case "module":    return self.emit_token(MODULE, str);
-		case "import":    return self.emit_token(IMPORT, str);
-		case "const":     return self.emit_token(CONST, str);
-		case "alias":     return self.emit_token(ALIAS, str);
-		case "attrdef":   return self.emit_token(ATTRDEF, str);
 		case "typedef":   return self.emit_token(TYPEDEF, str);
-		case "enum":      return self.emit_token(ENUM, str);
 		case "struct":    return self.emit_token(STRUCT, str);
 		case "union":     return self.emit_token(UNION, str);
-		case "bitstruct": return self.emit_token(BITSTRUCT, str);
-		case "faultdef":  return self.emit_token(FAULTDEF, str);
-		case "interface": return self.emit_token(INTERFACE, str);
+
 		// Explicit Keywords
-		case "if":        return self.emit_token(KEYWORD, str);
-		case "else":      return self.emit_token(KEYWORD, str);
-		case "while":     return self.emit_token(KEYWORD, str);
-		case "do":        return self.emit_token(KEYWORD, str);
-		case "for":       return self.emit_token(KEYWORD, str);
-		case "foreach":   return self.emit_token(KEYWORD, str);
-		case "foreach_r": return self.emit_token(KEYWORD, str);
-		case "tlocal":    return self.emit_token(TLOCAL, str);
-		case "inline":    return self.emit_token(INLINE, str);
+		case "break":     return self.emit_token(BREAK, str);
+		case "case":      return self.emit_token(CASE, str);
+		case "catch":     return self.emit_token(CATCH, str);
+		case "continue":  return self.emit_token(CONTINUE, str);
+		case "default":   return self.emit_token(DEFAULT, str);
+		case "defer":     return self.emit_token(DEFER, str);
+		case "do":        return self.emit_token(DO, str);
+		case "else":      return self.emit_token(ELSE, str);
+		case "false":     return self.emit_token(FALSE, str);
+		case "for":       return self.emit_token(FOR, str);
+		case "foreach":   return self.emit_token(FOREACH, str);
+		case "foreach_r": return self.emit_token(FOREACH_R, str);
+		case "if":        return self.emit_token(IF, str);
+		case "nextcase":  return self.emit_token(NEXTCASE, str);
+		case "null":      return self.emit_token(NUL, str);
+		case "return":    return self.emit_token(RETURN, str);
+		case "static":    return self.emit_token(STATIC, str);
+		case "switch":    return self.emit_token(SWITCH, str);
+		case "true":      return self.emit_token(TRUE, str);
+		case "try":       return self.emit_token(TRY, str);
+		case "var":       return self.emit_token(VAR, str);
+		case "while":     return self.emit_token(WHILE, str);
+
 		case "extern":    return self.emit_token(EXTERN, str);
+		case "inline":    return self.emit_token(INLINE, str);
+		case "tlocal":    return self.emit_token(TLOCAL, str);
+
 		// Base Types
 		case "void":      return self.emit_token(VOID, str);
 		case "bool":      return self.emit_token(BOOL, str);
@@ -745,7 +896,6 @@ fn Token*? Lexer.lex_ident(&self) => @pool()
 		case "bfloat16":  return self.emit_token(BFLOAT16, str);
 		case "float128":  return self.emit_token(FLOAT128, str);
 		case "fault":     return self.emit_token(FAULT, str);
-		case "any":       return self.emit_token(ANY, str);
 		case "typeid":    return self.emit_token(TYPEID, str);
 
 		default:

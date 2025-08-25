@@ -1648,11 +1648,6 @@ assignment_expr
 	| unary_expr assignment_op assignment_expr
 	;
 
-assignment_stmt_expr
-	: ternary_stmt_expr
-	| unary_stmt_expr assignment_op assignment_expr
-	;
-
 ternary_expr
 	: suffix_expr
 	| or_expr '?' expr ':' ternary_expr
