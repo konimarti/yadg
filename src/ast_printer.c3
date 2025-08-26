@@ -166,6 +166,22 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_PATH:
 			n += write_token_list(f, prefix, node.tok_list)!;
 
+		// -- Expression printing
+		case AST_LITERAL:
+			n += write_token(f, prefix, node.literal)!;
+
+		case AST_BINARY:
+			n += self.visit(node.binary.left)!;
+			nextcase AST_UNARY;
+
+		case AST_UNARY:
+			n += write_token(f, prefix, node.binary.op)!;
+			n += self.visit(node.binary.right)!;
+
+		case AST_CALL:
+			n += self.visit(node.call.call)!;
+			n += self.visit(node.call.trailing)!;
+
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}

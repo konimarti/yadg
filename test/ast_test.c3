@@ -281,5 +281,6 @@ fn void test_const_decl() @test
 	const Win32_SHORT POLLPRI    = 0x0400;
 	`;
 	run_parser(input)!!;
+	assert(false);
 }
 

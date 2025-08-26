@@ -36,10 +36,15 @@ enum AstType
 	AST_GLOBAL_DECL,
 	AST_CONST_DECL,
 
-	AST_EXPR,
 
 	AST_TYPE, // TokenList list
 	AST_PATH, // TokenList list
+
+	AST_EXPR, // TODO: needed?
+	AST_LITERAL,
+	AST_UNARY,
+	AST_BINARY,
+	AST_CALL,
 }
 
 alias AstList = List{ AstNode* };
@@ -180,6 +185,25 @@ struct AstNode (Printable)
 		AstNode*  child;			// inline, extern
 		TokenList tok_list;			// type, optional_type
 		AstList   ast_list;			// opt_attributes
+
+		// Expression parsing
+		struct call
+		{
+			AstNode* call;
+			AstNode* trailing;
+		}
+		struct binary
+		{
+			AstNode* left;
+			Token*   op;
+			AstNode* right;
+		}
+		struct unary
+		{
+			Token*   op;
+			AstNode* right;
+		}
+		Token*    literal;
 	}
 }
 
@@ -334,6 +358,19 @@ fn void AstNode.free(&self)
 		case AST_TYPE:
 		case AST_PATH:
 			free_tok_list(&self.tok_list);
+
+		case AST_LITERAL:
+			free_tok(self.literal);
+		case AST_UNARY:
+			free_tok(self.binary.op);
+			free_ast(self.binary.right);
+		case AST_BINARY:
+			free_ast(self.binary.left);
+			free_tok(self.binary.op);
+			free_ast(self.binary.right);
+		case AST_CALL:
+			free_ast(self.call.call);
+			free_ast(self.call.trailing);
 	}
 }
 
@@ -1638,7 +1675,357 @@ fn AstNode*? YadgParser.const_decl(&self)
 	return node;
 }
 
+fn bool assignment_op(TokenType type)
+{
+	switch(type)
+	{
+	case ASSIGN:
+	case ADD_ASSIGN:
+	case SUB_ASSIGN:
+	case MUL_ASSIGN:
+	case DIV_ASSIGN:
+	case MOD_ASSIGN:
+	case SHL_ASSIGN:
+	case SHR_ASSIGN:
+	case AND_ASSIGN:
+	case XOR_ASSIGN:
+	case OR_ASSIGN:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool relational_op(TokenType type)
+{
+	switch(type)
+	{
+	case LESS:
+	case GREATER:
+	case LE_OP:
+	case GE_OP:
+	case EQ_OP:
+	case NE_OP:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool additive_op(TokenType type)
+{
+	switch(type)
+	{
+	case PLUS:
+	case MINUS:
+	case CT_CONCAT_OP:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool bit_op(TokenType type)
+{
+	switch(type)
+	{
+	case AND:
+	case XOR:
+	case OR:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool shift_op(TokenType type)
+{
+	switch(type)
+	{
+	case SHL_OP:
+	case SHR_OP:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool mult_op(TokenType type)
+{
+	switch(type)
+	{
+	case STAR:
+	case DIV:
+	case MOD:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool unary_op(TokenType type)
+{
+	switch(type)
+	{
+	case AND:
+	case AND_OP:
+	case STAR:
+	case PLUS:
+	case MINUS:
+	case TILDE:
+	case BANG:
+	case INC_OP:
+	case DEC_OP:
+	case PAREN: // TODO: Grammar says: '(' type ')'
+		return true;
+	default: return false;
+	}
+}
+
+fn AstNode* YadgParser.new_binary(&self, AstNode* l, Token* op, AstNode* r)
+{
+	AstNode* node = self.make_node(AST_BINARY);
+	node.binary.left = l;
+	node.binary.op = op;
+	node.binary.right = r;
+	return node;
+}
+
+fn AstNode* YadgParser.new_unary(&self, Token* op, AstNode* right)
+{
+	AstNode* node = self.make_node(AST_LITERAL);
+	node.unary.op = op;
+	node.unary.right = right;
+	return node;
+}
+
+fn AstNode* YadgParser.new_literal(&self, Token* t)
+{
+	AstNode* node = self.make_node(AST_LITERAL);
+	node.literal = t;
+	return node;
+}
+
+fn AstNode* YadgParser.new_call(&self, AstNode* call, AstNode* trailing)
+{
+	AstNode* node = self.make_node(AST_CALL);
+	node.call.call = call;
+	node.call.trailing = trailing;
+	return node;
+}
+
+
+fn AstNode*? YadgParser.expr(&self)
+{
+	return self.assignment_expr()!;
+}
+
+fn AstNode*? YadgParser.assignment_expr(&self)
+{
+	AstNode* left = self.ternary_expr()!;
+
+	while (assignment_op(self.peek()))
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.ternary_expr()!;
+
+		left = self.new_binary(left, op, right);
+	}
+
+	return left;
+}
+
+fn AstNode*? YadgParser.ternary_expr(&self)
+{
+	// TODO: implement rest
+	return self.suffix_expr()!;
+}
+
+fn AstNode*? YadgParser.suffix_expr(&self)
+{
+	// TODO: handle terminal '?' / '?!'
+	return self.or_expr()!;
+}
+
+fn AstNode*? YadgParser.or_expr(&self)
+{
+	AstNode* left = self.and_expr()!;
+	while (self.peek() == OR_OP)
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.and_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.and_expr(&self)
+{
+	AstNode* left = self.relational_expr()!;
+	while (self.peek() == AND_OP)
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.relational_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.relational_expr(&self)
+{
+	AstNode* left = self.additive_expr()!;
+	while (relational_op(self.peek()))
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.additive_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.additive_expr(&self)
+{
+	AstNode* left = self.bit_expr()!;
+	while (additive_op(self.peek()))
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.bit_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.bit_expr(&self)
+{
+	AstNode* left = self.shift_expr()!;
+	while (bit_op(self.peek()))
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.shift_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.shift_expr(&self)
+{
+	AstNode* left = self.mult_expr()!;
+	while (shift_op(self.peek()))
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.mult_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.mult_expr(&self)
+{
+	AstNode* left = self.unary_expr()!;
+	while (mult_op(self.peek()))
+	{
+		Token* op = self.advance()!;
+		AstNode* right = self.unary_expr()!;
+		left = self.new_binary(left, op, right);
+	}
+	return left;
+}
+
+fn AstNode*? YadgParser.unary_expr(&self)
+{
+	if (unary_op(self.peek()))
+	{
+		// unary_op unary_expr
+		AstNode* right;
+		Token* op;
+		while (unary_op(self.peek()))
+		{
+			op = self.advance()!;
+			right = self.unary_expr()!;
+			right = self.new_unary(op, right);
+		}
+		return right;
+	}
+	else
+	{
+		// call_expr
+		return self.call_expr()!;
+	}
+}
+
+fn AstNode*? YadgParser.call_expr(&self)
+{
+	// Call primary_expr until "call_trailing" encountered
+	AstNode* call = self.primary_expr()!;
+	if (!call) return null;
+
+	while CALL_EXPR: (true)
+	{
+		AstNode* trailing = self.call_trailing()!;
+		if (!trailing) break CALL_EXPR;
+
+		call = self.new_call(call, trailing);
+	}
+	return call;
+}
+
 <*
+ Return a call trailing node or null if no call trailing is found.
+*>
+fn AstNode*? YadgParser.call_trailing(&self)
+{
+	switch (self.peek())
+	{
+		case BRACK: // '[' range_loc ']'
+		case PAREN: // TODO: call_invocation *opt_compound_statement*
+		case DOT:   // TODO: '.' *access_ident*
+		case INC_OP:
+		case DEC_OP:
+		case BANG:
+		case BANGBANG:
+			return self.new_literal(self.advance()!);
+		default:
+			self.report_error("call_trailing: return null");
+			return null;
+	}
+}
+
+<*
+ Returns null when no match found.
+*>
+fn AstNode*? YadgParser.primary_expr(&self)
+{
+	// TODO: initializer_list
+	// TODO: base_expr generic_expr
+	return self.base_expr()!;
+}
+
+<*
+ Returns null when no match found.
+*>
+fn AstNode*? YadgParser.base_expr(&self)
+{
+	switch (self.peek())
+	{
+		case STRING:
+		case NUMBER:
+		case NUL:
+		case TRUE:
+		case FALSE:
+		// TODO: string_expr
+		// TODO: base_expr
+			return self.new_literal(self.advance()!);
+		default:
+			// base_expr_assignable
+			switch (self.peek())
+			{
+				// ident_expr
+				case CONST_IDENT:
+				case IDENT:
+				case AT_IDENT:
+					return self.new_literal(self.advance()!);
+				default:
+					self.report_error("base_expr: return null");
+					return null;
+			}
+	}
+}
+
+/*
 expr
 	: assignment_expr
 	;
@@ -1646,6 +2033,20 @@ expr
 assignment_expr
 	: ternary_expr
 	| unary_expr assignment_op assignment_expr
+	;
+
+assignment_op
+	: '='
+	| ADD_ASSIGN
+	| SUB_ASSIGN
+	| MUL_ASSIGN
+	| DIV_ASSIGN
+	| MOD_ASSIGN
+	| SHL_ASSIGN
+	| SHR_ASSIGN
+	| AND_ASSIGN
+	| XOR_ASSIGN
+	| OR_ASSIGN
 	;
 
 ternary_expr
@@ -1787,6 +2188,18 @@ base_expr
 	| base_expr_assignable
 	;
 
+base_expr_assignable
+	: BUILTIN CONST_IDENT
+	| BUILTIN IDENT
+	| path ident_expr
+	| ident_expr
+	| local_ident_expr
+	| type '.' access_ident
+	| type '.' CONST_IDENT
+	| '(' expr ')'
+	| lambda_decl compound_statement
+	;
+
 generic_expr
 	: '{' generic_parameters '}'
 	;
@@ -1795,8 +2208,9 @@ initializer_list
 	: '{' opt_arg_list '}'
 	;
 
-*>
+*/
 
+/*
 fn AstNode*? YadgParser.expr(&self)
 {
 	// FIXME: Implement proper expr parsing. See doc-comment.
@@ -1812,3 +2226,4 @@ fn AstNode*? YadgParser.expr(&self)
 
 	return node;
 }
+*/
