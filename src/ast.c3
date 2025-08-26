@@ -1675,6 +1675,10 @@ fn AstNode*? YadgParser.const_decl(&self)
 	return node;
 }
 
+//
+// -- Expression parsing
+//
+
 fn bool assignment_op(TokenType type)
 {
 	switch(type)
@@ -1717,6 +1721,28 @@ fn bool additive_op(TokenType type)
 	case PLUS:
 	case MINUS:
 	case CT_CONCAT_OP:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool or_op(TokenType type)
+{
+	switch(type)
+	{
+	case OR_OP:
+	case CT_OR_OP:
+		return true;
+	default: return false;
+	}
+}
+
+fn bool and_op(TokenType type)
+{
+	switch(type)
+	{
+	case AND_OP:
+	case CT_AND_OP:
 		return true;
 	default: return false;
 	}
@@ -1776,7 +1802,7 @@ fn bool unary_op(TokenType type)
 	}
 }
 
-fn AstNode* YadgParser.new_binary(&self, AstNode* l, Token* op, AstNode* r)
+fn AstNode* YadgParser.new_binary(&self, AstNode* l, Token* op, AstNode* r) @private
 {
 	AstNode* node = self.make_node(AST_BINARY);
 	node.binary.left = l;
@@ -1785,7 +1811,7 @@ fn AstNode* YadgParser.new_binary(&self, AstNode* l, Token* op, AstNode* r)
 	return node;
 }
 
-fn AstNode* YadgParser.new_unary(&self, Token* op, AstNode* right)
+fn AstNode* YadgParser.new_unary(&self, Token* op, AstNode* right) @private
 {
 	AstNode* node = self.make_node(AST_LITERAL);
 	node.unary.op = op;
@@ -1793,14 +1819,14 @@ fn AstNode* YadgParser.new_unary(&self, Token* op, AstNode* right)
 	return node;
 }
 
-fn AstNode* YadgParser.new_literal(&self, Token* t)
+fn AstNode* YadgParser.new_literal(&self, Token* t) @private
 {
 	AstNode* node = self.make_node(AST_LITERAL);
 	node.literal = t;
 	return node;
 }
 
-fn AstNode* YadgParser.new_call(&self, AstNode* call, AstNode* trailing)
+fn AstNode* YadgParser.new_call(&self, AstNode* call, AstNode* trailing) @private
 {
 	AstNode* node = self.make_node(AST_CALL);
 	node.call.call = call;
@@ -1808,26 +1834,24 @@ fn AstNode* YadgParser.new_call(&self, AstNode* call, AstNode* trailing)
 	return node;
 }
 
-
-fn AstNode*? YadgParser.expr(&self)
+alias OpFn = fn bool(TokenType);
+alias ExprFn = fn AstNode*?(YadgParser*);
+macro AstNode*? YadgParser.eval_binary_expr(&self, OpFn is_op, ExprFn expr) @private
 {
-	return self.assignment_expr()!;
-}
-
-fn AstNode*? YadgParser.assignment_expr(&self)
-{
-	AstNode* left = self.ternary_expr()!;
-
-	while (assignment_op(self.peek()))
+	AstNode* left = expr(self)!;
+	while (is_op(self.peek()))
 	{
 		Token* op = self.advance()!;
-		AstNode* right = self.ternary_expr()!;
-
+		AstNode* right = expr(self)!;
 		left = self.new_binary(left, op, right);
 	}
-
 	return left;
 }
+
+fn AstNode*? YadgParser.expr(&self) => self.assignment_expr()!;
+
+fn AstNode*? YadgParser.assignment_expr(&self)
+	=> self.eval_binary_expr(&assignment_op, &YadgParser.ternary_expr);
 
 fn AstNode*? YadgParser.ternary_expr(&self)
 {
@@ -1842,88 +1866,25 @@ fn AstNode*? YadgParser.suffix_expr(&self)
 }
 
 fn AstNode*? YadgParser.or_expr(&self)
-{
-	AstNode* left = self.and_expr()!;
-	while (self.peek() == OR_OP)
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.and_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&or_op, &YadgParser.and_expr);
 
 fn AstNode*? YadgParser.and_expr(&self)
-{
-	AstNode* left = self.relational_expr()!;
-	while (self.peek() == AND_OP)
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.relational_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&and_op, &YadgParser.relational_expr);
 
 fn AstNode*? YadgParser.relational_expr(&self)
-{
-	AstNode* left = self.additive_expr()!;
-	while (relational_op(self.peek()))
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.additive_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&relational_op, &YadgParser.additive_expr);
 
 fn AstNode*? YadgParser.additive_expr(&self)
-{
-	AstNode* left = self.bit_expr()!;
-	while (additive_op(self.peek()))
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.bit_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&additive_op, &YadgParser.bit_expr);
 
 fn AstNode*? YadgParser.bit_expr(&self)
-{
-	AstNode* left = self.shift_expr()!;
-	while (bit_op(self.peek()))
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.shift_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&bit_op, &YadgParser.shift_expr);
 
 fn AstNode*? YadgParser.shift_expr(&self)
-{
-	AstNode* left = self.mult_expr()!;
-	while (shift_op(self.peek()))
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.mult_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&shift_op, &YadgParser.mult_expr);
 
 fn AstNode*? YadgParser.mult_expr(&self)
-{
-	AstNode* left = self.unary_expr()!;
-	while (mult_op(self.peek()))
-	{
-		Token* op = self.advance()!;
-		AstNode* right = self.unary_expr()!;
-		left = self.new_binary(left, op, right);
-	}
-	return left;
-}
+	=> self.eval_binary_expr(&mult_op, &YadgParser.unary_expr);
 
 fn AstNode*? YadgParser.unary_expr(&self)
 {
