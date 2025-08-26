@@ -4,7 +4,7 @@ import yadg::lexer;
 import std::collections::list;
 import std::io;
 
-faultdef INVALID_AST, INVALID_TYPE, INVALID_PATH;
+faultdef INVALID_AST, INVALID_TYPE, INVALID_PATH, NO_ATTRIBUTE;
 
 enum AstType
 {
@@ -36,15 +36,24 @@ enum AstType
 	AST_GLOBAL_DECL,
 	AST_CONST_DECL,
 
-
-	AST_TYPE, // TokenList list
 	AST_PATH, // TokenList list
+	AST_TYPE, // TokenList list
 
-	AST_EXPR, // TODO: needed?
+	// -- Expression parsing
+
+	AST_PAREN,
+	AST_INTERFACE,
+	AST_ENUM_PARAM_DECL,
+
 	AST_LITERAL,
 	AST_UNARY,
 	AST_BINARY,
 	AST_CALL,
+	AST_LAMBDA,
+	AST_LIST,
+	AST_TOKEN,
+	AST_PARAMETER,
+	AST_ARG,
 }
 
 alias AstList = List{ AstNode* };
@@ -70,7 +79,7 @@ struct AstNode (Printable)
 		{
 			AstNode* path_at_type;
 			Token*   attribute_name;
-			Token*   attribute_param;
+			AstNode* attribute_param;
 		}
 		struct faults
 		{
@@ -80,14 +89,14 @@ struct AstNode (Printable)
 		struct struct_decl
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl;	// paren
+			AstNode* opt_interface_impl;	// paren
 			AstNode* opt_attributes;
 			Token*   struct_body;		// brace
 		}
 		struct enum_decl
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl;	// paren
+			AstNode* opt_interface_impl;	// paren
 			AstNode* enum_spec;
 			AstNode* opt_attributes;
 			Token*   enum_list;		// brace
@@ -95,12 +104,17 @@ struct AstNode (Printable)
 		struct enum_spec
 		{
 			AstNode* base_type_no_generics;	// base_type_no_user_defined / TYPE_IDENT / { IDENT SCOPE } TYPE_IDENT
-			Token*   enum_params;		// paren
+			AstNode* enum_params;		// paren
+		}
+		struct enum_param_decl
+		{
+			AstNode* type;
+			Token*   ident;
 		}
 		struct bitstruct_decl
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl;	// paren
+			AstNode* opt_interface_impl;	// paren
 			AstNode* type_no_generics;	// base_type_no_generics / type_no_generics type_suffix
 			AstNode* opt_attributes;
 			Token*   bitstruct_body;	// brace
@@ -115,10 +129,15 @@ struct AstNode (Printable)
 			Token*    type_ident;
 			TokenList interface_parents;
 		}
+		struct _interface
+		{
+			Token*  type_ident;	// brace
+			Token*  opt_generic_parameters;
+		}
 		struct distinct_decl
 		{
 			Token*   type_ident;
-			Token*   opt_interface_impl;	// paren
+			AstNode* opt_interface_impl;	// paren
 			AstNode* opt_attributes;
 			bool     opt_inline;
 			AstNode* type;
@@ -126,7 +145,7 @@ struct AstNode (Printable)
 		struct func_definition
 		{
 			AstNode* func_header;
-			Token*   fn_parameter_list;	// paren
+			AstNode* fn_parameter_list;	// paren
 			AstNode* opt_attributes;
 		}
 		struct func_header
@@ -138,12 +157,12 @@ struct AstNode (Printable)
 		struct func_typedef
 		{
 			AstNode* optional_type;
-			Token*   fn_parameter_list;	// paren
+			AstNode* fn_parameter_list;	// paren
 		}
 		struct macro_decl
 		{
 			AstNode* macro_header;
-			Token*   macro_params;		// paren
+			AstNode* macro_params;		// paren
 			AstNode* opt_attributes;
 		}
 		struct alias_define
@@ -163,7 +182,7 @@ struct AstNode (Printable)
 		struct attr_def
 		{
 			Token*   at_type_ident;
-			Token*   opt_parameters;	// paren
+			AstNode* opt_parameters;	// paren
 			AstNode* opt_attributes;
 			AstList  attribute_comma_list; 	// comma is optional
 		}
@@ -187,11 +206,6 @@ struct AstNode (Printable)
 		AstList   ast_list;			// opt_attributes
 
 		// Expression parsing
-		struct call
-		{
-			AstNode* call;
-			AstNode* trailing;
-		}
 		struct binary
 		{
 			AstNode* left;
@@ -200,8 +214,14 @@ struct AstNode (Printable)
 		}
 		struct unary
 		{
-			Token*   op;
+			AstNode*   op;
 			AstNode* right;
+		}
+		struct lambda
+		{
+			AstNode* maybe_opt_type;
+			AstNode* fn_param_list;
+			AstNode* opt_attributes;
 		}
 		Token*    literal;
 	}
@@ -238,9 +258,9 @@ fn void AstNode.free(&self)
 {
 	switch (self.type)
 	{
-		case AST_TRANSLATION_UNIT:
 		case AST_FAULT_DECL:
 		case AST_OPT_ATTRIBUTES:
+		case AST_TRANSLATION_UNIT:
 			free_ast_list(&self.ast_list);
 
 		case AST_TOP_LEVEL:
@@ -255,7 +275,7 @@ fn void AstNode.free(&self)
 		case AST_ATTRIBUTE:
 			free_ast(self._attribute.path_at_type);
 			free_tok(self._attribute.attribute_name);
-			free_tok(self._attribute.attribute_param);
+			free_ast(self._attribute.attribute_param);
 
 		case AST_FAULTS:
 			free_tok(self.faults.const_ident);
@@ -263,24 +283,28 @@ fn void AstNode.free(&self)
 
 		case AST_STRUCT_DECL:
 			free_tok(self.struct_decl.type_ident);
-			free_tok(self.struct_decl.opt_interface_impl);
+			free_ast(self.struct_decl.opt_interface_impl);
 			free_ast(self.struct_decl.opt_attributes);
 			free_tok(self.struct_decl.struct_body);
 
 		case AST_ENUM_DECL:
 			free_tok(self.enum_decl.type_ident);
-			free_tok(self.enum_decl.opt_interface_impl);
+			free_ast(self.enum_decl.opt_interface_impl);
 			free_ast(self.enum_decl.enum_spec);
 			free_ast(self.enum_decl.opt_attributes);
 			free_tok(self.enum_decl.enum_list);
 
 		case AST_ENUM_SPEC:
 			free_ast(self.enum_spec.base_type_no_generics);
-			free_tok(self.enum_spec.enum_params);
+			free_ast(self.enum_spec.enum_params);
+
+		case AST_ENUM_PARAM_DECL:
+			free_ast(self.enum_param_decl.type);
+			free_tok(self.enum_param_decl.ident);
 
 		case AST_BITSTRUCT_DECL:
 			free_tok(self.bitstruct_decl.type_ident);
-			free_tok(self.bitstruct_decl.opt_interface_impl);
+			free_ast(self.bitstruct_decl.opt_interface_impl);
 			free_ast(self.bitstruct_decl.type_no_generics);
 			free_ast(self.bitstruct_decl.opt_attributes);
 			free_tok(self.bitstruct_decl.bitstruct_body);
@@ -295,13 +319,13 @@ fn void AstNode.free(&self)
 
 		case AST_DISTINCT_DECL:
 			free_tok(self.distinct_decl.type_ident);
-			free_tok(self.distinct_decl.opt_interface_impl);
+			free_ast(self.distinct_decl.opt_interface_impl);
 			free_ast(self.distinct_decl.opt_attributes);
 			free_ast(self.distinct_decl.type);
 
 		case AST_FUNC_DEFINITION:
 			free_ast(self.func_definition.func_header);
-			free_tok(self.func_definition.fn_parameter_list);
+			free_ast(self.func_definition.fn_parameter_list);
 			free_ast(self.func_definition.opt_attributes);
 
 		case AST_FUNC_HEADER:
@@ -311,12 +335,12 @@ fn void AstNode.free(&self)
 
 		case AST_MACRO_DECL:
 			free_ast(self.macro_decl.macro_header);
-			free_tok(self.macro_decl.macro_params);
+			free_ast(self.macro_decl.macro_params);
 			free_ast(self.macro_decl.opt_attributes);
 
 		case AST_FUNC_TYPEDEF:
 			free_ast(self.func_typedef.optional_type);
-			free_tok(self.func_typedef.fn_parameter_list);
+			free_ast(self.func_typedef.fn_parameter_list);
 
 		case AST_ALIAS_DEFINE_IDENT:
 			free_tok(self.alias_define.define_ident);
@@ -332,7 +356,7 @@ fn void AstNode.free(&self)
 
 		case AST_ATTRIBUTE_DEF:
 			free_tok(self.attr_def.at_type_ident);
-			free_tok(self.attr_def.opt_parameters);
+			free_ast(self.attr_def.opt_parameters);
 			free_ast(self.attr_def.opt_attributes);
 			free_ast_list(&self.attr_def.attribute_comma_list);
 
@@ -348,29 +372,46 @@ fn void AstNode.free(&self)
 			free_ast(self.const_decl.opt_attributes);
 			free_ast(self.const_decl.expr);
 
+		case AST_INTERFACE:
+			free_tok(self._interface.type_ident);
+			free_tok(self._interface.opt_generic_parameters);
+
 		case AST_INLINE:
 		case AST_EXTERN:
 		case AST_CONST:
 		case AST_TLOCAL:
 			free_ast(self.child);
 
-		case AST_EXPR:
-		case AST_TYPE:
+		// -- EXPRESSION
+
 		case AST_PATH:
+		case AST_TYPE:
 			free_tok_list(&self.tok_list);
 
+		case AST_ARG:
+		case AST_LIST:
+		case AST_PARAMETER:
+		case AST_PAREN:
+			free_ast_list(&self.ast_list);
+
 		case AST_LITERAL:
+		case AST_TOKEN:
 			free_tok(self.literal);
+
+		case AST_CALL:
 		case AST_UNARY:
-			free_tok(self.binary.op);
-			free_ast(self.binary.right);
+			free_ast(self.unary.op);
+			free_ast(self.unary.right);
+
 		case AST_BINARY:
 			free_ast(self.binary.left);
 			free_tok(self.binary.op);
 			free_ast(self.binary.right);
-		case AST_CALL:
-			free_ast(self.call.call);
-			free_ast(self.call.trailing);
+
+		case AST_LAMBDA:
+			free_ast(self.lambda.maybe_opt_type);
+			free_ast(self.lambda.fn_param_list);
+			free_ast(self.lambda.opt_attributes);
 	}
 }
 
@@ -619,12 +660,24 @@ fn AstNode*? YadgParser.opt_attributes(&self)
 {
 	AstNode* node = self.make_node(AST_OPT_ATTRIBUTES);
 	node.ast_list.init(self.allocator);
-
 	defer catch node.free();
 
-	AstNode *ptr;
-	while ((ptr = self._attribute()!) && ptr) node.ast_list.push(ptr);
-
+	while ATTRIBUTE: (self.peek() != EOF)
+	{
+		switch (self.peek())
+		{
+			case AT_IDENT:
+			case AT_TYPE_IDENT:
+			case IDENT:
+				if (try attr = self._attribute())
+				{
+					node.ast_list.push(attr);
+					continue;
+				}
+			default:
+				break ATTRIBUTE;
+		}
+	}
 	return node;
 }
 
@@ -644,6 +697,8 @@ attribute_name
 *>
 fn AstNode*? YadgParser._attribute(&self)
 {
+	// FIXME: memory leak?
+
 	AstNode* path;
 	if (self.peek() == IDENT)
 	{
@@ -651,15 +706,20 @@ fn AstNode*? YadgParser._attribute(&self)
 	}
 	if (self.peek() != AT_IDENT && self.peek() != AT_TYPE_IDENT)
 	{
-		return null;
+		return NO_ATTRIBUTE?;
 	}
 
 	Token* name = self.advance()!;
 
-	Token* param;
-	if (self.peek() == PAREN)
+	AstNode* param;
+	if (self.expect(LPAREN)!)
 	{
-		param = self.advance()!;
+		param = self.attribute_param_list()!;
+		if (!self.expect(RPAREN)!)
+		{
+			self.report_error("attribute: expected RPAREN after attribute_param_list");
+			return INVALID_AST?;
+		}
 	}
 
 	AstNode* node = self.make_node(AST_ATTRIBUTE);
@@ -732,12 +792,15 @@ fn AstNode*? YadgParser.struct_decl(&self)
 
 	node.struct_decl.type_ident = self.advance()!;
 
-	if (self.peek() == PAREN)
+	if (self.peek() == LPAREN)
 	{
-		node.struct_decl.opt_interface_impl = self.advance()!;
+		node.struct_decl.opt_interface_impl = self.opt_interface_impl()!;
 	}
 
-	node.struct_decl.opt_attributes = self.opt_attributes()!;
+	if (self.peek() == IDENT || self.peek() == AT_IDENT || self.peek() == AT_TYPE_IDENT)
+	{
+		node.struct_decl.opt_attributes = self.opt_attributes()!;
+	}
 
 	if (self.peek() != BRACE)
 	{
@@ -776,9 +839,9 @@ fn AstNode*? YadgParser.enum_decl(&self)
 	node.enum_decl.type_ident = self.advance()!;
 
 	// opt_interface_impl
-	if (self.peek() == PAREN)
+	if (self.peek() == LPAREN)
 	{
-		node.enum_decl.opt_interface_impl = self.advance()!;
+		node.enum_decl.opt_interface_impl = self.opt_interface_impl()!;
 	}
 
 	// enum_spec
@@ -861,9 +924,9 @@ fn AstNode*? YadgParser.enum_spec(&self)
 	node.enum_spec.base_type_no_generics = self.base_type_no_generics()!;
 
 	// enum_params
-	if (self.peek() == PAREN)
+	if (self.peek() == LPAREN)
 	{
-		node.enum_spec.enum_params = self.advance()!;
+		node.enum_spec.enum_params = self.enum_params()!;
 	}
 
 	return node;
@@ -936,9 +999,9 @@ fn AstNode*? YadgParser.bitstruct_decl(&self)
 	node.bitstruct_decl.type_ident = self.advance()!;
 
 	// opt_interface_impl
-	if (self.peek() == PAREN)
+	if (self.peek() == LPAREN)
 	{
-		node.bitstruct_decl.opt_interface_impl = self.advance()!;
+		node.bitstruct_decl.opt_interface_impl = self.opt_interface_impl()!;
 	}
 
 	if (!self.expect(COLON)!)
@@ -1015,8 +1078,18 @@ fn AstNode*? YadgParser.parse_type(&self, bool type_suffix = true, bool generic_
 			{
 				case CT_TYPEOF:
 				case CT_TYPEFROM:
-				case CT_VATYPE:
 				case CT_EVALTYPE:
+					// TODO: Hack
+					while (self.peek() != EOF && self.peek() != RPAREN)
+					{
+						node.tok_list.push(self.advance()!);
+					}
+					if (self.peek() == RPAREN)
+					{
+						node.tok_list.push(self.advance()!);
+					}
+
+				case CT_VATYPE:
 					node.tok_list.push(self.advance()!);
 				default:
 			}
@@ -1110,12 +1183,12 @@ fn AstNode*? YadgParser.func_type(&self)
 
 	node.func_typedef.optional_type = self.optional_type()!;
 
-	if (self.peek() != PAREN)
+	if (self.peek() != LPAREN)
 	{
-		self.report_error("func_type: expected a 'PAREN' token as fn_paramter_list");
+		self.report_error("func_type: expected a 'LPAREN' token as fn_paramter_list");
 		return INVALID_AST?;
 	}
-	node.func_typedef.fn_parameter_list = self.advance()!;
+	node.func_typedef.fn_parameter_list = self.fn_parameter_list()!;
 
 	return node;
 }
@@ -1211,12 +1284,12 @@ fn AstNode*? YadgParser.func_definition(&self)
 
 	node.func_definition.func_header = self.func_header()!;
 
-	if (self.peek() != PAREN)
+	if (self.peek() != LPAREN)
 	{
-		self.report_error("func_definition: expected 'fn_parameter_list' (a 'PAREN' token)");
+		self.report_error("func_definition: expected 'fn_parameter_list' (a 'LPAREN' token)");
 		return INVALID_AST?;
 	}
-	node.func_definition.fn_parameter_list = self.advance()!;
+	node.func_definition.fn_parameter_list = self.fn_parameter_list()!;
 
 	node.func_definition.opt_attributes = self.opt_attributes()!;
 
@@ -1273,12 +1346,12 @@ fn AstNode*? YadgParser.macro_decl(&self)
 
 	node.macro_decl.macro_header = self.macro_header()!;
 
-	if (self.peek() != PAREN)
+	if (self.peek() != LPAREN)
 	{
-		self.report_error("macro_decl: expected 'macro_params' (a 'PAREN' token)");
+		self.report_error("macro_decl: expected 'macro_params' (a 'LPAREN' token)");
 		return INVALID_AST?;
 	}
-	node.macro_decl.macro_params = self.advance()!;
+	node.macro_decl.macro_params = self.macro_params()!;
 
 	node.macro_decl.opt_attributes = self.opt_attributes()!;
 
@@ -1395,9 +1468,9 @@ fn AstNode*? YadgParser.distinct_decl(&self)
 
 	node.distinct_decl.type_ident = self.advance()!;
 
-	if (self.peek() == PAREN)
+	if (self.peek() == LPAREN)
 	{
-		node.distinct_decl.opt_interface_impl = self.advance()!;
+		node.distinct_decl.opt_interface_impl = self.opt_interface_impl()!;
 	}
 
 	node.distinct_decl.opt_attributes = self.opt_attributes()!;
@@ -1546,16 +1619,15 @@ fn AstNode*? YadgParser.define_decl(&self)
 			defer catch node.free();
 
 			node.attr_def.at_type_ident = self.advance()!;
-			if (self.peek() == PAREN)
+			if (self.peek() == LPAREN)
 			{
-				node.attr_def.opt_parameters = self.advance()!;
+				node.attr_def.opt_parameters = self.fn_parameter_list()!;
 			}
 			node.attr_def.opt_attributes = self.opt_attributes()!;
 
 			if (self.expect(ASSIGN)!)
 			{
-				AstNode *attr;
-				while ((attr = self._attribute()!) && attr)
+				while (try attr = self._attribute())
 				{
 					node.attr_def.attribute_comma_list.push(attr);
 					if (self.expect(COMMA)!) continue;
@@ -1787,6 +1859,7 @@ fn bool unary_op(TokenType type)
 {
 	switch(type)
 	{
+	case LPAREN: // TODO: Grammar says: '(' type ')'
 	case AND:
 	case AND_OP:
 	case STAR:
@@ -1796,7 +1869,6 @@ fn bool unary_op(TokenType type)
 	case BANG:
 	case INC_OP:
 	case DEC_OP:
-	case PAREN: // TODO: Grammar says: '(' type ')'
 		return true;
 	default: return false;
 	}
@@ -1811,9 +1883,9 @@ fn AstNode* YadgParser.new_binary(&self, AstNode* l, Token* op, AstNode* r) @pri
 	return node;
 }
 
-fn AstNode* YadgParser.new_unary(&self, Token* op, AstNode* right) @private
+fn AstNode* YadgParser.new_unary(&self, AstNode* op, AstNode* right) @private
 {
-	AstNode* node = self.make_node(AST_LITERAL);
+	AstNode* node = self.make_node(AST_UNARY);
 	node.unary.op = op;
 	node.unary.right = right;
 	return node;
@@ -1826,32 +1898,59 @@ fn AstNode* YadgParser.new_literal(&self, Token* t) @private
 	return node;
 }
 
+fn AstNode* YadgParser.new_token(&self, Token* t) @private
+{
+	AstNode* node = self.make_node(AST_TOKEN);
+	node.literal = t;
+	return node;
+}
+
+fn AstNode* YadgParser.new_single_entry_paren(&self, AstNode* entry) @private
+{
+	AstNode* node = self.make_node(AST_PAREN);
+	node.ast_list.init(self.allocator);
+	node.ast_list.push(entry);
+	return node;
+}
+
 fn AstNode* YadgParser.new_call(&self, AstNode* call, AstNode* trailing) @private
 {
 	AstNode* node = self.make_node(AST_CALL);
-	node.call.call = call;
-	node.call.trailing = trailing;
+	node.unary.op = call;
+	node.unary.right = trailing;
+	return node;
+}
+
+fn AstNode* YadgParser.new_lambda(&self, AstNode* maybe_opt_type, AstNode* fn_param_list, AstNode* opt_attributes) @private
+{
+	AstNode* node = self.make_node(AST_LAMBDA);
+	node.lambda.maybe_opt_type = maybe_opt_type;
+	node.lambda.fn_param_list = fn_param_list;
+	node.lambda.opt_attributes = opt_attributes;
 	return node;
 }
 
 alias OpFn = fn bool(TokenType);
 alias ExprFn = fn AstNode*?(YadgParser*);
-macro AstNode*? YadgParser.eval_binary_expr(&self, OpFn is_op, ExprFn expr) @private
+macro AstNode*? YadgParser.eval_binary_expr(&self, OpFn is_op, ExprFn eval) @private
 {
-	AstNode* left = expr(self)!;
+	AstNode* left = eval(self)!;
 	while (is_op(self.peek()))
 	{
 		Token* op = self.advance()!;
-		AstNode* right = expr(self)!;
+		AstNode* right = eval(self)!;
 		left = self.new_binary(left, op, right);
 	}
 	return left;
 }
 
-fn AstNode*? YadgParser.expr(&self) => self.assignment_expr()!;
+fn AstNode*? YadgParser.expr(&self)
+	=> self.assignment_expr()!;
 
 fn AstNode*? YadgParser.assignment_expr(&self)
 	=> self.eval_binary_expr(&assignment_op, &YadgParser.ternary_expr);
+
+fn AstNode*? YadgParser.constant_expr(&self) @inline => self.ternary_expr();
 
 fn AstNode*? YadgParser.ternary_expr(&self)
 {
@@ -1890,38 +1989,63 @@ fn AstNode*? YadgParser.unary_expr(&self)
 {
 	if (unary_op(self.peek()))
 	{
-		// unary_op unary_expr
-		AstNode* right;
-		Token* op;
-		while (unary_op(self.peek()))
+		Token *tok;
+		AstNode* op;
+		if (self.peek() == LPAREN)
 		{
-			op = self.advance()!;
-			right = self.unary_expr()!;
-			right = self.new_unary(op, right);
+			tok = self.advance()!;
+			op = self.type()!;
+			// TODO: Hackish. Maybe we need some more lookahead and
+			// a way to see if it is a type
+			if (op && op.tok_list.len() == 0)
+			{
+				free_ast(op);
+				self.push_back(tok);
+				return self.call_expr()!;
+			}
+			if (!self.expect(RPAREN)!)
+			{
+				io::printfn("type token in unary: %s", op.tok_list);
+				self.report_error("unary_expr: invalid '(' type ')' term");
+				return INVALID_AST?;
+			}
 		}
-		return right;
+		else
+		{
+			op = self.new_token(self.advance()!);
+		}
+		return self.new_unary(op, self.unary_expr()!);
 	}
-	else
-	{
-		// call_expr
-		return self.call_expr()!;
-	}
+	return self.call_expr()!;
+
 }
 
 fn AstNode*? YadgParser.call_expr(&self)
 {
-	// Call primary_expr until "call_trailing" encountered
 	AstNode* call = self.primary_expr()!;
-	if (!call) return null;
-
-	while CALL_EXPR: (true)
+	while CALL_EXPR: (is_call_trailing(self.peek()))
 	{
 		AstNode* trailing = self.call_trailing()!;
-		if (!trailing) break CALL_EXPR;
-
 		call = self.new_call(call, trailing);
 	}
 	return call;
+}
+
+fn bool is_call_trailing(TokenType type)
+{
+	switch (type)
+	{
+		case LPAREN:
+		case DOT:
+		case BRACK: // '[' range_loc ']' / '[' range_expr ']'
+		case INC_OP:
+		case DEC_OP:
+		case BANG:
+		case BANGBANG:
+			return true;
+		default:
+			return false;
+	}
 }
 
 <*
@@ -1931,17 +2055,71 @@ fn AstNode*? YadgParser.call_trailing(&self)
 {
 	switch (self.peek())
 	{
+		case LPAREN:
+			//  call_invocation opt_compound_statement
+			// call_invocation : '(' call_arg_list ')' call_inline_attributes
+
+			// call_arg_list
+			self.advance()!; // Consume '('
+			AstNode* op = self.call_arg_list()!;
+
+			// call_inline_attributes
+			while (self.peek() != EOF && self.peek() == AT_IDENT)
+			{
+				op = self.new_unary(op, self.new_token(self.advance()!));
+			}
+
+			// opt_compound_statement
+			if (self.peek() == BRACE)
+			{
+				op = self.new_unary(op, self.new_token(self.advance()!));
+			}
+			return op;
+
+		case DOT:
+			// '.' access_ident
+			AstNode* op = self.new_token(self.advance()!); // Consume '.'
+			return self.new_unary(op, self.access_ident()!);
+
 		case BRACK: // '[' range_loc ']'
-		case PAREN: // TODO: call_invocation *opt_compound_statement*
-		case DOT:   // TODO: '.' *access_ident*
 		case INC_OP:
 		case DEC_OP:
 		case BANG:
 		case BANGBANG:
-			return self.new_literal(self.advance()!);
+			return self.new_token(self.advance()!);
 		default:
-			self.report_error("call_trailing: return null");
-			return null;
+			self.report_error("call_trailing: unhandled token");
+			unreachable("call_trailing: unhandled token");
+	}
+}
+
+fn AstNode*? YadgParser.access_ident(&self)
+{
+	switch (self.peek())
+	{
+		case CT_EVAL:
+			// CT_EVAL '(' expr ')'
+			AstNode* op = self.new_token(self.advance()!); // Consume CT_EVAL
+			if (!self.expect(LPAREN)!)
+			{
+				self.report_error("access_ident: expected LPAREN");
+				return INVALID_AST?;
+			}
+			op = self.new_unary(op, self.expr()!);
+			if (!self.expect(RPAREN)!)
+			{
+				self.report_error("access_ident: expected RPAREN");
+				return INVALID_AST?;
+			}
+			return op;
+		case IDENT:
+		case AT_IDENT:
+		case HASH_IDENT:
+		case TYPEID:
+			return self.new_token(self.advance()!);
+		default:
+			self.report_error("access_ident: unknown token");
+			return INVALID_AST?;
 	}
 }
 
@@ -1950,241 +2128,157 @@ fn AstNode*? YadgParser.call_trailing(&self)
 *>
 fn AstNode*? YadgParser.primary_expr(&self)
 {
-	// TODO: initializer_list
-	// TODO: base_expr generic_expr
-	return self.base_expr()!;
+	if (self.peek() == BRACE) return self.new_token(self.advance()!);
+	AstNode *expr = self.base_expr()!;
+	if (self.peek() == BRACE)
+	{
+		// TODO: Handle/store generic parameters, we discard it for now
+		self.advance()!;
+	}
+	return expr;
+}
+
+fn AstNode*? YadgParser.base_expr(&self)
+{
+       switch (self.peek())
+       {
+               // TODO: string_expr
+               // TODO: base_expr
+               case STRING:
+               case NUMBER:
+               case NUL:
+               case TRUE:
+               case FALSE:
+                       return self.new_literal(self.advance()!);
+               default:
+                       // base_expr_assignable
+                       switch (self.peek())
+                       {
+                               // ident_expr
+                               case IDENT:
+			       		AstNode* path = self.path()!;
+					if (self.peek() == CONST_IDENT || self.peek() == AT_IDENT)
+					{
+						path.tok_list.push(self.advance()!);
+					}
+					return path;
+
+                               case CONST_IDENT:
+                               case AT_IDENT:
+                               case CT_IDENT:
+                               case HASH_IDENT:
+                                       return self.new_token(self.advance()!);
+
+			       case LPAREN:
+			       		// '(' expr ')'
+					self.expect(LPAREN)!;
+					AstNode* e = self.expr()!;
+					self.expect(RPAREN)!;
+					return self.new_single_entry_paren(e);
+
+				// TODO: Handle BUILTIN
+				// TODO: Handle CT vars
+
+				case CT_DEFINED:
+					AstNode *ct = self.new_token(self.advance()!);
+					if (!self.expect(LPAREN)!)
+					{
+						self.report_error("base_expr: expected LPAREN after CT_DEFINED");
+						return INVALID_AST?;
+					}
+					AstNode *paren = self.arg_list()!;
+					if (!self.expect(RPAREN)!)
+					{
+						self.report_error("base_expr: expected RPAREN after parsing CT_DEFINED");
+						return INVALID_AST?;
+					}
+					return self.new_unary(ct, paren); // TODO: is unary the right "structure"?
+
+                         	case CT_VACOUNT:
+                                       return self.new_token(self.advance()!);
+
+				case CT_FEATURE:
+					AstNode *ct = self.new_token(self.advance()!);
+					if (!self.expect(LPAREN)!)
+					{
+						self.report_error("base_expr: expected LPAREN after CT_FEATURE");
+						return INVALID_AST?;
+					}
+					if (!self.expect(CONST_IDENT)!)
+					{
+						self.report_error("base_expr: expected CONST_IDENT after CT_FEATURE");
+						return INVALID_AST?;
+					}
+					AstNode *const_ident = self.new_token(self.advance()!);
+					if (!self.expect(RPAREN)!)
+					{
+						self.report_error("base_expr: expected RPAREN after parsing CT_FEATURE");
+						return INVALID_AST?;
+					}
+					return self.new_unary(ct, const_ident); // TODO: is unary the right "structure"?
+
+				// lambda_decl compount_statement
+				case FUNC:
+					AstNode* call = self.lambda_decl()!;
+					if (!self.expect(BRACE)!)
+					{
+						self.report_error("base_expr: expected '{'");
+						return INVALID_AST?;
+					}
+					return self.new_call(call, self.new_token(self.advance()!));
+
+                               default:
+			       		// type '.' access_ident
+			       		// type '.' CONST_IDENT
+			       		AstNode* type = self.type()!;
+					if (!self.expect(DOT)!)
+					{
+						self.report_error("base_expr: expected DOT");
+						return INVALID_AST?;
+					}
+					if (self.peek() == CONST_IDENT)
+					{
+						return self.new_unary(type, self.new_token(self.advance()!));
+					}
+					return self.new_unary(type, self.access_ident()!);
+                       }
+       }
 }
 
 <*
- Returns null when no match found.
-*>
-fn AstNode*? YadgParser.base_expr(&self)
-{
-	switch (self.peek())
-	{
-		case STRING:
-		case NUMBER:
-		case NUL:
-		case TRUE:
-		case FALSE:
-		// TODO: string_expr
-		// TODO: base_expr
-			return self.new_literal(self.advance()!);
-		default:
-			// base_expr_assignable
-			switch (self.peek())
-			{
-				// ident_expr
-				case CONST_IDENT:
-				case IDENT:
-				case AT_IDENT:
-					return self.new_literal(self.advance()!);
-				default:
-					self.report_error("base_expr: return null");
-					return null;
-			}
-	}
-}
-
-/*
-expr
-	: assignment_expr
-	;
-
-assignment_expr
-	: ternary_expr
-	| unary_expr assignment_op assignment_expr
-	;
-
-assignment_op
-	: '='
-	| ADD_ASSIGN
-	| SUB_ASSIGN
-	| MUL_ASSIGN
-	| DIV_ASSIGN
-	| MOD_ASSIGN
-	| SHL_ASSIGN
-	| SHR_ASSIGN
-	| AND_ASSIGN
-	| XOR_ASSIGN
-	| OR_ASSIGN
-	;
-
-ternary_expr
-	: suffix_expr
-	| or_expr '?' expr ':' ternary_expr
-	| suffix_expr ELVIS ternary_expr
-	| suffix_expr OPTELSE ternary_expr
-	| lambda_decl implies_body
-	;
-
-suffix_expr
-	: or_expr
-	| or_expr '?'
-	| or_expr '?' '!'
-	;
-
-or_expr
-	: and_expr
-	| or_expr OR_OP and_expr
-	| or_expr CT_OR_OP and_expr
-	;
-
 lambda_decl
 	: FN maybe_optional_type fn_parameter_list opt_attributes
 	;
 
-and_expr
-	: relational_expr
-	| and_expr AND_OP relational_expr
-	| and_expr CT_AND_OP relational_expr
+maybe_optional_type
+	: optional_type
+	| empty
 	;
 
-relational_expr
-	: additive_expr
-	| relational_expr relational_op additive_expr
-	;
-
-relational_op
-	: '<'
-	| '>'
-	| LE_OP
-	| GE_OP
-	| EQ_OP
-	| NE_OP
-	;
-
-additive_expr
-	: bit_expr
-	| additive_expr additive_op bit_expr
-	;
-
-additive_op
-	: '+'
-	| '-'
-	| CT_CONCAT_OP
-	;
-
-bit_expr
-	: shift_expr
-	| bit_expr bit_op shift_expr
-	;
-
-bit_op
-	: '&'
-	| '^'
-	| '|'
-	;
-
-shift_expr
-	: mult_expr
-	| shift_expr shift_op mult_expr
-	;
-
-shift_op
-	: SHL_OP
-	| SHR_OP
-	;
-
-mult_expr
-	: unary_expr
-	| mult_expr mult_op unary_expr
-	;
-
-mult_op
-	: '*'
-	| '/'
-	| '%'
-	;
-
-unary_expr
-	: call_expr
-	| unary_op unary_expr
-	;
-
-unary_op
-	: '&'
-	| AND_OP
-	| '*'
-	| '+'
-	| '-'
-	| '~'
-	| '!'
-	| INC_OP
-	| DEC_OP
-	| '(' type ')'
-	;
-
-call_expr
-	: primary_expr
-	| call_expr call_trailing
-	;
-
-call_trailing
-	: '[' range_loc ']'
-	| '[' range_expr ']'
-	| call_invocation opt_compound_statement
-	| '.' access_ident
-	| INC_OP
-	| DEC_OP
-	| '!'
-	| BANGBANG
-	;
-
-primary_expr
-	: base_expr
-	| initializer_list
-	| base_expr generic_expr
-	;
-
-base_expr
-	: string_expr
-	| INTEGER
-	| bytes_expr
-	| NUL
-	| CHAR_LITERAL
-	| REAL
-	| TRUE
-	| FALSE
-	| base_expr_assignable
-	;
-
-base_expr_assignable
-	: BUILTIN CONST_IDENT
-	| BUILTIN IDENT
-	| path ident_expr
-	| ident_expr
-	| local_ident_expr
-	| type '.' access_ident
-	| type '.' CONST_IDENT
-	| '(' expr ')'
-	| lambda_decl compound_statement
-	;
-
-generic_expr
-	: '{' generic_parameters '}'
-	;
-
-initializer_list
-	: '{' opt_arg_list '}'
-	;
-
-*/
-
-/*
-fn AstNode*? YadgParser.expr(&self)
+*>
+fn AstNode*? YadgParser.lambda_decl(&self)
 {
-	// FIXME: Implement proper expr parsing. See doc-comment.
-
-	AstNode* node = self.make_node(AST_EXPR);
-	node.tok_list.init(self.allocator);
-	defer catch node.free();
-
-	while (self.peek() != EOF && self.peek() != SEMICOLON)
+	if (!self.expect(FUNC)!)
 	{
-		node.tok_list.push(self.advance()!);
+		self.report_error("lambda_decl: expected FUNC token");
+		return INVALID_AST?;
 	}
 
-	return node;
+	AstNode* maybe_opt_type;
+	AstNode* fn_parameter_list;
+	AstNode* opt_attributes;
+
+	defer catch {
+		free_ast(maybe_opt_type);
+		free_ast(fn_parameter_list);
+		free_ast(opt_attributes);
+	};
+
+	// maybe_optional_type
+	maybe_opt_type = self.optional_type() ?? null;
+	fn_parameter_list = self.fn_parameter_list()!;
+	opt_attributes = self.opt_attributes()!;
+
+	return self.new_lambda(maybe_opt_type, fn_parameter_list, opt_attributes);
 }
-*/
+

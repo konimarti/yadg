@@ -68,13 +68,13 @@ enum TokenType : ushort
 
 	// Structure
 	// LBRACE,
-	// LPAREN,
-	// LBRACK,
 	// RBRACE,
-	// RPAREN,
+	// LBRACK,
 	// RBRACK,
+	LPAREN,
+	RPAREN,
+	// PAREN, // ()
 	BRACE, // {}
-	PAREN, // ()
 	BRACK, // []
 	IMPLIES, // =>
 
@@ -85,14 +85,17 @@ enum TokenType : ushort
 	BCOMMENT,  // Block comment /* */
 
 	// Identifiers and Strings
-	IDENT,
 	STRING,
 	NUMBER,
+	IDENT,
+	TYPE_IDENT,
+	CONST_IDENT,
 	AT_IDENT,
 	AT_TYPE_IDENT,
 	AT_CONST_IDENT,
-	CONST_IDENT,
-	TYPE_IDENT,
+	HASH_IDENT,
+	HASH_TYPE_IDENT,
+	HASH_CONST_IDENT,
 
 	// Keywords
 
@@ -164,13 +167,48 @@ enum TokenType : ushort
 	FAULT,
 	ANY,
 	TYPEID,
-	CT_CONST_IDENT, // ${CONST}
-	CT_TYPE_IDENT,  // ${TYPE}
-	CT_IDENT,       // ${IDENT}
-	CT_TYPEOF,      // $typeof
-	CT_TYPEFROM,    // $typefrom (..)
-	CT_VATYPE,      // $vatype [..]
-	CT_EVALTYPE,    // $evaltype (..)
+        CT_CONST_IDENT, // ${CONST}
+        CT_TYPE_IDENT,  // ${TYPE}
+        CT_IDENT,       // ${IDENT}
+
+	CT_ALIGNOF,
+	CT_ASSERT,
+	CT_ASSIGNABLE,
+	CT_CASE,
+	CT_DEFAULT,
+	CT_DEFINED,
+	CT_ECHO,
+	CT_ELSE,
+	CT_ENDFOR,
+	CT_ENDFOREACH,
+	CT_ENDIF,
+	CT_ENDSWITCH,
+	CT_ERROR,
+	CT_EVAL,
+	CT_EVALTYPE,
+	CT_EXEC,
+	CT_EXTNAMEOF,
+	CT_FEATURE,
+	CT_FOR,
+	CT_FOREACH,
+	CT_IF,
+	CT_IS_CONST,
+	CT_INCLUDE,
+	CT_NAMEOF,
+	CT_OFFSETOF,
+	CT_QNAMEOF,
+	CT_SIZEOF,
+	CT_STRINGIFY,
+	CT_SWITCH,
+	CT_TYPEFROM,
+	CT_TYPEOF,
+	CT_VAARG,
+	CT_VACONST,
+	CT_VACOUNT,
+	CT_VAEXPR,
+	CT_VAREF,
+	CT_VASPLAT,
+	CT_VATYPE,
 
 	EOF,
 }
@@ -554,16 +592,16 @@ fn Token*? Lexer._next(&self) @private => @pool()
 			return self.emit_token(type);
 
 		// case '{': self.advance()!; return self.emit_token(LBRACE);
-		// case '(': self.advance()!; return self.emit_token(LPAREN);
 		// case '[': self.advance()!; return self.emit_token(LBRACK);
 		//       '[<' --> LVEC
 		// case '}': self.advance()!; return self.emit_token(RBRACE);
-		// case ')': self.advance()!; return self.emit_token(RPAREN);
 		// case ']': self.advance()!; return self.emit_token(RBRACK);
 		//       '>]' --> RVEC
 		case '{': return self.lex_brace();
-		case '(': return self.lex_paren();
 		case '[': return self.lex_brack();
+		// case '(': return self.lex_paren();
+		case '(': self.advance()!; return self.emit_token(LPAREN);
+		case ')': self.advance()!; return self.emit_token(RPAREN);
 
 		// Don't emit line or block comments, only scan them.
 		//case '/': return self.lex_comment()!;
@@ -699,7 +737,7 @@ fn String? Lexer.scan_string(&self, Allocator allocator)
 
 fn Token*? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string(self.allocator)!);
 fn Token*? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}", self.allocator)!);
-fn Token*? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")", self.allocator)!);
+// fn Token*? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")", self.allocator)!);
 fn Token*? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]", self.allocator)!);
 
 fn Token*? Lexer.lex_comment(&self)
@@ -939,10 +977,44 @@ fn Token*? Lexer.lex_compile_time(&self) => @pool()
 	switch (str)
 	{
 		// Compile time
-		case "$typeof":   return self.emit_token(CT_TYPEOF, str);
-		case "$typefrom": return self.emit_token(CT_TYPEFROM, str);
-		case "$vatype":   return self.emit_token(CT_VATYPE, str);
-		case "$evaltype": return self.emit_token(CT_EVALTYPE, str);
+		case "$alignof":    return self.emit_token(CT_ALIGNOF, str);
+		case "$assert":     return self.emit_token(CT_ASSERT, str);
+		case "$assignable": return self.emit_token(CT_ASSIGNABLE, str);
+		case "$case":       return self.emit_token(CT_CASE, str);
+		case "$default":    return self.emit_token(CT_DEFAULT, str);
+		case "$defined":    return self.emit_token(CT_DEFINED, str);
+		case "$echo":       return self.emit_token(CT_ECHO, str);
+		case "$else":       return self.emit_token(CT_ELSE, str);
+		case "$endfor":     return self.emit_token(CT_ENDFOR, str);
+		case "$endforeach": return self.emit_token(CT_ENDFOREACH, str);
+		case "$endif":      return self.emit_token(CT_ENDIF, str);
+		case "$endswitch":  return self.emit_token(CT_ENDSWITCH, str);
+		case "$error":      return self.emit_token(CT_ERROR, str);
+		case "$eval":       return self.emit_token(CT_EVAL, str);
+		case "$evaltype":   return self.emit_token(CT_EVALTYPE, str);
+		case "$exec":       return self.emit_token(CT_EXEC, str);
+		case "$extnameof":  return self.emit_token(CT_EXTNAMEOF, str);
+		case "$feature":    return self.emit_token(CT_FEATURE, str);
+		case "$for":        return self.emit_token(CT_FOR, str);
+		case "$foreach":    return self.emit_token(CT_FOREACH, str);
+		case "$if":         return self.emit_token(CT_IF, str);
+		case "$is_const":   return self.emit_token(CT_IS_CONST, str);
+		case "$include":    return self.emit_token(CT_INCLUDE, str);
+		case "$nameof":     return self.emit_token(CT_NAMEOF, str);
+		case "$offsetof":   return self.emit_token(CT_OFFSETOF, str);
+		case "$qnameof":    return self.emit_token(CT_QNAMEOF, str);
+		case "$sizeof":     return self.emit_token(CT_SIZEOF, str);
+		case "$stringify":  return self.emit_token(CT_STRINGIFY, str);
+		case "$switch":     return self.emit_token(CT_SWITCH, str);
+		case "$typefrom":   return self.emit_token(CT_TYPEFROM, str);
+		case "$typeof":     return self.emit_token(CT_TYPEOF, str);
+		case "$vaarg":      return self.emit_token(CT_VAARG, str);
+		case "$vaconst":    return self.emit_token(CT_VACONST, str);
+		case "$vacount":    return self.emit_token(CT_VACOUNT, str);
+		case "$vaexpr":     return self.emit_token(CT_VAEXPR, str);
+		case "$varef":      return self.emit_token(CT_VAREF, str);
+		case "$vasplat":    return self.emit_token(CT_VASPLAT, str);
+		case "$vatype":     return self.emit_token(CT_VATYPE, str);
 
 		default:
 			TokenType type;
@@ -956,6 +1028,36 @@ fn Token*? Lexer.lex_compile_time(&self) => @pool()
 			return self.emit_token(type, str);
 	}
 }
+
+
+fn Token*? Lexer.lex_hash_ident(&self) => @pool()
+{
+	char c;
+	DString text = dstring::temp();
+	if (self.peek()! != '#')
+	{
+		self.report_error("expected '#'");
+		return INVALID_CHAR?;
+	}
+	text.append_char(self.advance()!); // Consume '#'
+	while ((c = self.peek()!) && (is_ident(c) || c == '#'))
+	{
+		text.append_char(self.advance()!);
+	}
+
+	String str = text.str_view().copy(self.allocator);
+
+	TokenType type;
+	switch(classify(str))
+	{
+		case STR_CONST: type = HASH_CONST_IDENT;
+		case STR_TYPE:  type = HASH_TYPE_IDENT;
+		case STR_IDENT: type = HASH_IDENT;
+		default:        return INVALID_CHAR?;
+	}
+	return self.emit_token(type, str);
+}
+
 
 
 

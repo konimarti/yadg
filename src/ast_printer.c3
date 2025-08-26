@@ -42,9 +42,9 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 	switch (node.type)
 	{
-		case AST_TRANSLATION_UNIT:
 		case AST_FAULT_DECL:
 		case AST_OPT_ATTRIBUTES:
+		case AST_TRANSLATION_UNIT:
 			foreach (ast : node.ast_list)
 				n += self.visit(ast)!;
 
@@ -64,28 +64,32 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_ATTRIBUTE:
 			n += self.visit(node._attribute.path_at_type)!;
 			n += write_token(f, prefix, node._attribute.attribute_name)!;
-			n += write_token(f, prefix, node._attribute.attribute_param)!;
+			n += self.visit(node._attribute.attribute_param)!;
 
 		case AST_STRUCT_DECL:
 			n += write_token(f, prefix, node.struct_decl.type_ident)!;
-			n += write_token(f, prefix, node.struct_decl.opt_interface_impl)!;
+			n += self.visit(node.struct_decl.opt_interface_impl)!;
 			n += self.visit(node.struct_decl.opt_attributes)!;
 			n += write_token(f, prefix, node.struct_decl.struct_body)!;
 
 		case AST_ENUM_DECL:
 			n += write_token(f, prefix, node.enum_decl.type_ident)!;
-			n += write_token(f, prefix, node.enum_decl.opt_interface_impl)!;
+			n += self.visit(node.enum_decl.opt_interface_impl)!;
 			n += self.visit(node.enum_decl.enum_spec)!;
 			n += self.visit(node.enum_decl.opt_attributes)!;
 			n += write_token(f, prefix, node.enum_decl.enum_list)!;
 
 		case AST_ENUM_SPEC:
 			n += self.visit(node.enum_spec.base_type_no_generics)!;
-			n += write_token(f, prefix, node.enum_spec.enum_params)!;
+			n += self.visit(node.enum_spec.enum_params)!;
+
+		case AST_ENUM_PARAM_DECL:
+			n += self.visit(node.enum_param_decl.type)!;
+			n += write_token(f, prefix, node.enum_param_decl.ident)!;
 
 		case AST_BITSTRUCT_DECL:
 			n += write_token(f, prefix, node.bitstruct_decl.type_ident)!;
-			n += write_token(f, prefix, node.bitstruct_decl.opt_interface_impl)!;
+			n += self.visit(node.bitstruct_decl.opt_interface_impl)!;
 			n += self.visit(node.bitstruct_decl.type_no_generics)!;
 			n += self.visit(node.bitstruct_decl.opt_attributes)!;
 			n += write_token(f, prefix, node.bitstruct_decl.bitstruct_body)!;
@@ -98,9 +102,13 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += write_token(f, prefix, node.interface_decl_name.type_ident)!;
 			n += write_token_list(f, prefix, node.interface_decl_name.interface_parents)!;
 
+		case AST_INTERFACE:
+			n += write_token(f, prefix, node._interface.type_ident)!;
+			n += write_token(f, prefix, node._interface.opt_generic_parameters)!;
+
 		case AST_FUNC_DEFINITION:
 			n += self.visit(node.func_definition.func_header)!;
-			n += write_token(f, prefix, node.func_definition.fn_parameter_list)!;
+			n += self.visit(node.func_definition.fn_parameter_list)!;
 			n += self.visit(node.func_definition.opt_attributes)!;
 
 		case AST_FUNC_HEADER:
@@ -110,19 +118,19 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 		case AST_MACRO_DECL:
 			n += self.visit(node.macro_decl.macro_header)!;
-			n += write_token(f, prefix, node.macro_decl.macro_params)!;
+			n += self.visit(node.macro_decl.macro_params)!;
 			n += self.visit(node.macro_decl.opt_attributes)!;
 
 		case AST_DISTINCT_DECL:
 			n += write_token(f, prefix, node.distinct_decl.type_ident)!;
-			n += write_token(f, prefix, node.distinct_decl.opt_interface_impl)!;
+			n += self.visit(node.distinct_decl.opt_interface_impl)!;
 			n += self.visit(node.distinct_decl.opt_attributes)!;
 			if (node.distinct_decl.opt_inline) n += write_string(f, prefix, "INLINE")!;
 			n += self.visit(node.distinct_decl.type)!;
 
 		case AST_FUNC_TYPEDEF:
 			n += self.visit(node.func_typedef.optional_type)!;
-			n += write_token(f, prefix, node.func_typedef.fn_parameter_list)!;
+			n += self.visit(node.func_typedef.fn_parameter_list)!;
 
 		case AST_ALIAS_DEFINE_IDENT:
 			n += write_token(f, prefix, node.alias_define.define_ident)!;
@@ -138,7 +146,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 
 		case AST_ATTRIBUTE_DEF:
 			n += write_token(f, prefix, node.attr_def.at_type_ident)!;
-			n += write_token(f, prefix, node.attr_def.opt_parameters)!;
+			n += self.visit(node.attr_def.opt_parameters)!;
 			n += self.visit(node.attr_def.opt_attributes)!;
 			foreach (attr : node.attr_def.attribute_comma_list)
 				n += self.visit(attr)!;
@@ -161,26 +169,37 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 		case AST_TLOCAL:
 			n += self.visit(node.child)!;
 
-		case AST_EXPR:
 		case AST_TYPE:
 		case AST_PATH:
 			n += write_token_list(f, prefix, node.tok_list)!;
 
 		// -- Expression printing
+
+		case AST_ARG:
+		case AST_LIST:
+		case AST_PARAMETER:
+		case AST_PAREN:
+			foreach (ast : node.ast_list)
+				n += self.visit(ast)!;
+
 		case AST_LITERAL:
+		case AST_TOKEN:
 			n += write_token(f, prefix, node.literal)!;
 
 		case AST_BINARY:
 			n += self.visit(node.binary.left)!;
-			nextcase AST_UNARY;
-
-		case AST_UNARY:
 			n += write_token(f, prefix, node.binary.op)!;
 			n += self.visit(node.binary.right)!;
 
 		case AST_CALL:
-			n += self.visit(node.call.call)!;
-			n += self.visit(node.call.trailing)!;
+		case AST_UNARY:
+			n += self.visit(node.unary.op)!;
+			n += self.visit(node.unary.right)!;
+
+		case AST_LAMBDA:
+			n += self.visit(node.lambda.maybe_opt_type)!;
+			n += self.visit(node.lambda.fn_param_list)!;
+			n += self.visit(node.lambda.opt_attributes)!;
 
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;

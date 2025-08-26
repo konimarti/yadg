@@ -21,7 +21,7 @@ fn int main(String[] args) => @assert_leak(true)
 
 	 @deprecated
 	*>
-	struct Hello @local (Printable)
+	struct Hello (Printable) @local
 	{
 		inline   int a;
 		String   world;

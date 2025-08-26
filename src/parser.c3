@@ -107,6 +107,7 @@ fn Token*? YadgParser.advance(&self)
 	{
 		tok = self.lexer.next()!;
 	}
+	io::printfn("%s", tok);
 	self.consumed.push(tok);
 	return tok;
 }
