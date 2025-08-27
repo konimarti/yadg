@@ -163,6 +163,7 @@ fn void test_func_definition() @test
 
 	`;
 	run_parser(input)!!;
+	assert(false);
 }
 
 fn void test_macro() @test

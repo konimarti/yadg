@@ -656,30 +656,38 @@ attribute
 	| attribute_name '(' attribute_param_list ')'
 	;
 
+	Return null when no attributes are present;
 *>
 fn AstNode*? YadgParser.opt_attributes(&self)
 {
+	if (!is_attribute(self.peek())) return null;
+
 	AstNode* node = self.make_node(AST_OPT_ATTRIBUTES);
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	while ATTRIBUTE: (self.peek() != EOF)
+	while ATTRIBUTE: (self.peek() != EOF && is_attribute(self.peek()))
 	{
-		switch (self.peek())
+		if (try attr = self._attribute())
 		{
-			case AT_IDENT:
-			case AT_TYPE_IDENT:
-			case IDENT:
-				if (try attr = self._attribute())
-				{
-					node.ast_list.push(attr);
-					continue;
-				}
-			default:
-				break ATTRIBUTE;
+			node.ast_list.push(attr);
 		}
 	}
 	return node;
+}
+
+fn bool is_attribute(TokenType type) @inline
+{
+	switch (type)
+	{
+		case AT_IDENT:
+		case AT_TYPE_IDENT:
+		case IDENT:
+			return true;
+		default:
+			return false;
+
+	}
 }
 
 <*
@@ -700,9 +708,6 @@ fn AstNode*? YadgParser._attribute(&self)
 {
 	AstNode* node = self.make_node(AST_ATTRIBUTE);
 	defer catch node.free();
-
-	io::printn(">> enter attribute");
-	defer io::printn(">> leaving attribute");
 
 	if (self.peek() == IDENT)
 	{

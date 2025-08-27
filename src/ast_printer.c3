@@ -34,10 +34,11 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	Formatter *f = &self.f;
 
 	DString tmp = dstring::temp();
-	tmp.append_repeat('\t', self.depth-1);
-	String prefix = tmp.str_view();
+	tmp.append_repeat(' ', 4*(self.depth-1));
+	String outside = tmp.str_view();
+	String prefix = string::tformat("%s    ", outside);
 
-	n += f.print(prefix)!;
+	n += f.print(outside)!;
 	n += f.printf("(%s\n", node.type)!;
 
 	switch (node.type)
@@ -206,7 +207,7 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 	}
 
 	// Closing the paren
-	n += f.print(prefix)!;
+	n += f.print(outside)!;
 	n += f.printf(")\n")!;
 
 	return n;
