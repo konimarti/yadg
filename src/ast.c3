@@ -77,8 +77,7 @@ struct AstNode (Printable)
 		}
 		struct _attribute
 		{
-			AstNode* path_at_type;
-			Token*   attribute_name;
+			AstNode* attribute_name;
 			AstNode* attribute_param;
 		}
 		struct faults
@@ -274,8 +273,7 @@ fn void AstNode.free(&self)
 			free_ast(self._module.opt_attributes);
 
 		case AST_ATTRIBUTE:
-			free_ast(self._attribute.path_at_type);
-			free_tok(self._attribute.attribute_name);
+			free_ast(self._attribute.attribute_name);
 			free_ast(self._attribute.attribute_param);
 
 		case AST_FAULTS:
@@ -711,14 +709,16 @@ fn AstNode*? YadgParser._attribute(&self)
 
 	if (self.peek() == IDENT)
 	{
-		node._attribute.path_at_type = self.path_at_type_ident()!;
+		node._attribute.attribute_name = self.path_at_type_ident()!;
 	}
-	if (self.peek() != AT_IDENT && self.peek() != AT_TYPE_IDENT)
+	else if (self.peek() == AT_IDENT || self.peek() == AT_TYPE_IDENT)
+	{
+		node._attribute.attribute_name = self.new_literal(self.advance()!);
+	}
+	else
 	{
 		return NO_ATTRIBUTE?;
 	}
-
-	node._attribute.attribute_name = self.advance()!;
 
 	if (self.expect(LPAREN)!)
 	{
@@ -2004,9 +2004,8 @@ fn AstNode*? YadgParser.unary_expr(&self)
 		if (self.peek() == LPAREN)
 		{
 			tok = self.advance()!; // Consume '('
+			// TODO: Hackish. Better way to see if it is a type?
 			op = self.type();
-			// TODO: Hackish. Maybe we need some more lookahead and
-			// a way to see if it is a type
 			if (catch op)
 			{
 				self.push_back(tok);
@@ -2137,8 +2136,11 @@ fn AstNode*? YadgParser.access_ident(&self)
 *>
 fn AstNode*? YadgParser.primary_expr(&self)
 {
+	// initializer_list
 	if (self.peek() == BRACE) return self.new_token(self.advance()!);
+	// base_expr
 	AstNode *expr = self.base_expr()!;
+	// generic_expr
 	if (self.peek() == BRACE)
 	{
 		// TODO: Handle/store generic parameters, we discard it for now
@@ -2213,12 +2215,12 @@ fn AstNode*? YadgParser.base_expr(&self)
 						self.report_error("base_expr: expected LPAREN after CT_FEATURE");
 						return INVALID_AST?;
 					}
-					if (!self.expect(CONST_IDENT)!)
+					if (self.peek() != CONST_IDENT)
 					{
 						self.report_error("base_expr: expected CONST_IDENT after CT_FEATURE");
 						return INVALID_AST?;
 					}
-					AstNode *const_ident = self.new_token(self.advance()!);
+					AstNode *const_ident = self.new_single_entry_paren(self.new_token(self.advance()!));
 					if (!self.expect(RPAREN)!)
 					{
 						self.report_error("base_expr: expected RPAREN after parsing CT_FEATURE");

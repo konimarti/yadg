@@ -11,9 +11,6 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	io::printn(">> entering attribute_param_list");
-	defer io::printn(">> leaving attribute_param_list");
-
 	while (self.peek() != EOF && self.peek() != RPAREN)
 	{
 		TokenType type = self.peek();
@@ -45,7 +42,7 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 			default:
 				node.ast_list.push(self.constant_expr()!);
 		}
-		if (self.expect(COMMA)!) continue;
+		if (!self.expect(COMMA)!) break;
 	}
 
 	return node;
@@ -94,7 +91,6 @@ interfaces
 *>
 fn AstNode*? YadgParser._interface(&self)
 {
-	io::printfn("INTERFACE: peek = %s", self.peek());
 	AstNode* node = self.make_node(AST_INTERFACE);
 	defer catch node.free();
 
@@ -265,16 +261,10 @@ fn AstNode*? YadgParser.parameter_default(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	io::printn(">> entering parameter_default");
-	defer io::printn(">> leaving parameter_default");
-
 	if (try type = self.type())
 	{
-		io::printn(" >>> type found");
 		node.ast_list.push(type);
 	}
-
-		io::printfn(" >>> peek: %s", self.peek());
 
 	switch (self.peek())
 	{
@@ -310,7 +300,6 @@ fn AstNode*? YadgParser.parameter_default(&self)
 			}
 			node.ast_list.push(self.opt_attributes()!);
 		case CT_IDENT:
-			io::printn("-- CT_IDENT --");
 			// CT_IDENT
 			// CT_IDENT ELLIPSIS
 			node.ast_list.push(self.new_literal(self.advance()!));
@@ -326,7 +315,6 @@ fn AstNode*? YadgParser.parameter_default(&self)
 	if (self.peek() == ASSIGN)
 	{
 		node.ast_list.push(self.new_token(self.advance()!)); // Consume '='
-		io::printn(" >>> consume ASSIGN");
 
 		// Now handle type or expr
 		if (try type = self.type())
@@ -335,7 +323,6 @@ fn AstNode*? YadgParser.parameter_default(&self)
 		}
 		else
 		{
-			io::printn(" >>> evaluate expr()");
 			node.ast_list.push(self.expr()!);
 		}
 	}
