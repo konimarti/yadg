@@ -69,14 +69,14 @@ fn void? YadgParser.synchronize(&self)
 		{
 			case SEMICOLON:
 			case BRACE:
-				self.advance()!;
+				self.advance()!.free();
 				io::printfn("stop synchro: next tok now: %s", self.peek());
 				nextcase EOF;
 			case EOF:
 				break LOOP;
 			default:
 				io::printfn("synchronize: discard %s", self.peek());
-				self.advance()!;
+				self.advance()!.free();
 		}
 	}
 }
@@ -117,7 +117,7 @@ fn bool? YadgParser.expect(&self, TokenType type)
 {
 	if (self.peek() == type)
 	{
-		self.advance()!;
+		self.advance()!.free();
 		return true;
 	}
 	return false;

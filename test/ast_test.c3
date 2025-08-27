@@ -193,6 +193,8 @@ fn void test_macro() @test
 
 	macro @ceil($input) @const => $$ceil($input);
 
+	macro void Mutex.@in_lock(&mutex; @body) {}
+
 	`;
 
 	run_parser(input)!!;

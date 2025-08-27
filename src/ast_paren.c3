@@ -220,7 +220,7 @@ fn AstNode*? YadgParser.parameters(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	while (self.peek() != EOF && self.peek() != RPAREN)
+	while (self.peek() != EOF && self.peek() != RPAREN && self.peek() != SEMICOLON)
 	{
 		node.ast_list.push(self.parameter_default()!);
 		if (self.expect(COMMA)!) continue;
@@ -365,9 +365,14 @@ fn AstNode*? YadgParser.macro_params(&self)
 		if (self.peek() == AT_IDENT)
 		{
 			node.ast_list.push(self.new_literal(self.advance()!));
-			if (self.peek() == LPAREN)
+			if (self.expect(LPAREN)!)
 			{
 				node.ast_list.push(self.parameters()!);
+				if (!self.expect(RPAREN)!)
+				{
+					self.report_error("macro_params: expected RPAREN after trailing_block_param");
+					return INVALID_AST?;
+				}
 			}
 		}
 	}

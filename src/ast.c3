@@ -435,13 +435,17 @@ fn AstNode*? YadgParser.translation_unit(&self)
 
 fn AstNode*? YadgParser.top_level(&self)
 {
-	Token* tok_comm;
+	Token* tok_comment;
 	AstNode *top;
 
 	if (try c = self.comment())
 	{
-		tok_comm = c;
+		tok_comment = c;
 	}
+	defer catch {
+		free_tok(tok_comment);
+		free_ast(top);
+	};
 
 	if (self.expect(EXTERN)!)
 	{
@@ -479,11 +483,15 @@ fn AstNode*? YadgParser.top_level(&self)
 		}
 	}
 
-	if (!top) return null;
+	if (!top) {
+		if (tok_comment) tok_comment.free();
+		io::printfn("top_level returned null; token=%s", self.peek());
+		return null;
+	}
 
 	AstNode* node = self.make_node(AST_TOP_LEVEL);
 	node.top_level.decl = top;
-	node.top_level.comment = tok_comm;
+	node.top_level.comment = tok_comment;
 	return node;
 }
 
@@ -496,20 +504,21 @@ fn Token*? YadgParser.comment(&self)
 		{
 			case LCOMMENT:
 			case BCOMMENT:
-				break; // switch
+				tok = self.advance()!;
+				if (tok) tok.free();
 			case CONTRACT:
+				if (comment) comment.free();
 				comment = self.advance()!;
-				continue;
 			default:
 				break LOOP;
 		}
-		self.advance()!;
 	}
 
 	Token* next = self.advance()!;
 	defer self.push_back(next);
 	if (comment && comment.type != CONTRACT && next.range.start.ln - comment.range.end.ln > 1)
 	{
+		comment.free();
 		return NOT_FOUND?;
 	}
 
@@ -531,6 +540,7 @@ fn AstNode*? YadgParser._module(&self)
 	}
 
 	AstNode* node = self.make_node(AST_MODULE);
+	defer catch node.free();
 
 	// path_ident
 	node._module.path_ident = self.path_ident()!;
@@ -766,8 +776,6 @@ fn AstNode*? YadgParser.fault_decl(&self)
 *>
 fn AstNode*? YadgParser.faults(&self)
 {
-	(void)self.comment();
-
 	if (self.peek() != CONST_IDENT) return null;
 
 	AstNode* node = self.make_node(AST_FAULTS);
@@ -1251,9 +1259,10 @@ fn AstNode*? YadgParser.interface_decl_name(&self)
 	}
 
 	AstNode* node = self.make_node(AST_INTERFACE_DECL_NAME);
-	node.interface_decl_name.type_ident = self.advance()!;
 	node.interface_decl_name.interface_parents.init(self.allocator);
 	defer catch node.free();
+
+	node.interface_decl_name.type_ident = self.advance()!;
 
 	// interface_parents
 	if (self.expect(COLON)!)
@@ -1548,6 +1557,7 @@ fn AstNode*? YadgParser.define_decl(&self)
 			case AT_IDENT:
 				// alias_define_ident
 				AstNode* node = self.make_node(AST_ALIAS_DEFINE_IDENT);
+				defer catch node.free();
 
 				switch (self.peek())
 				{
@@ -1594,6 +1604,7 @@ fn AstNode*? YadgParser.define_decl(&self)
 			case TYPE_IDENT:
 				// alias_type_ident
 				AstNode* node = self.make_node(AST_ALIAS_TYPE_IDENT);
+				defer catch node.free();
 
 				node.alias_type.type_ident = self.advance()!;
 				node.alias_type.opt_attributes = self.opt_attributes()!;
@@ -1629,10 +1640,8 @@ fn AstNode*? YadgParser.define_decl(&self)
 			node.attr_def.at_type_ident = self.advance()!;
 			if (self.peek() == LPAREN)
 			{
-				io::printn(">> before param !!");
 				node.attr_def.opt_parameters = self.fn_parameter_list()!;
 			}
-			io::printn(">>> after param list before attr");
 			node.attr_def.opt_attributes = self.opt_attributes()!;
 
 			if (self.expect(ASSIGN)!)
@@ -1944,11 +1953,18 @@ alias OpFn = fn bool(TokenType);
 alias ExprFn = fn AstNode*?(YadgParser*);
 macro AstNode*? YadgParser.eval_binary_expr(&self, OpFn is_op, ExprFn eval) @private
 {
-	AstNode* left = eval(self)!;
+	AstNode* left, right;
+	Token* op;
+	defer catch {
+		free_ast(left);
+		free_tok(op);
+		free_ast(right);
+	}
+	left = eval(self)!;
 	while (is_op(self.peek()))
 	{
-		Token* op = self.advance()!;
-		AstNode* right = eval(self)!;
+		op = self.advance()!;
+		right = eval(self)!;
 		left = self.new_binary(left, op, right);
 	}
 	return left;
@@ -1997,6 +2013,7 @@ fn AstNode*? YadgParser.mult_expr(&self)
 
 fn AstNode*? YadgParser.unary_expr(&self)
 {
+
 	if (unary_op(self.peek()))
 	{
 		Token *tok;
@@ -2013,6 +2030,8 @@ fn AstNode*? YadgParser.unary_expr(&self)
 			}
 			if (!self.expect(RPAREN)!)
 			{
+				free_tok(tok);
+				free_ast(op);
 				io::printfn("type token in unary: %s", op.tok_list);
 				self.report_error("unary_expr: invalid '(' type ')' term");
 				return INVALID_AST?;
@@ -2031,6 +2050,7 @@ fn AstNode*? YadgParser.unary_expr(&self)
 fn AstNode*? YadgParser.call_expr(&self)
 {
 	AstNode* call = self.primary_expr()!;
+	defer catch free_ast(call);
 	while CALL_EXPR: (is_call_trailing(self.peek()))
 	{
 		AstNode* trailing = self.call_trailing()!;
@@ -2068,7 +2088,7 @@ fn AstNode*? YadgParser.call_trailing(&self)
 			// call_invocation : '(' call_arg_list ')' call_inline_attributes
 
 			// call_arg_list
-			self.advance()!; // Consume '('
+			self.advance()!.free(); // Consume '('
 			AstNode* op = self.call_arg_list()!;
 
 			// call_inline_attributes
@@ -2108,6 +2128,7 @@ fn AstNode*? YadgParser.access_ident(&self)
 		case CT_EVAL:
 			// CT_EVAL '(' expr ')'
 			AstNode* op = self.new_token(self.advance()!); // Consume CT_EVAL
+			defer catch free_ast(op);
 			if (!self.expect(LPAREN)!)
 			{
 				self.report_error("access_ident: expected LPAREN");
@@ -2144,7 +2165,7 @@ fn AstNode*? YadgParser.primary_expr(&self)
 	if (self.peek() == BRACE)
 	{
 		// TODO: Handle/store generic parameters, we discard it for now
-		self.advance()!;
+		self.advance()!.free();
 	}
 	return expr;
 }
@@ -2192,12 +2213,14 @@ fn AstNode*? YadgParser.base_expr(&self)
 
 				case CT_DEFINED:
 					AstNode *ct = self.new_token(self.advance()!);
+					defer catch free_ast(ct);
 					if (!self.expect(LPAREN)!)
 					{
 						self.report_error("base_expr: expected LPAREN after CT_DEFINED");
 						return INVALID_AST?;
 					}
 					AstNode *paren = self.arg_list()!;
+					defer catch free_ast(paren);
 					if (!self.expect(RPAREN)!)
 					{
 						self.report_error("base_expr: expected RPAREN after parsing CT_DEFINED");
@@ -2210,6 +2233,7 @@ fn AstNode*? YadgParser.base_expr(&self)
 
 				case CT_FEATURE:
 					AstNode *ct = self.new_token(self.advance()!);
+					defer catch free_ast(ct);
 					if (!self.expect(LPAREN)!)
 					{
 						self.report_error("base_expr: expected LPAREN after CT_FEATURE");
@@ -2221,6 +2245,7 @@ fn AstNode*? YadgParser.base_expr(&self)
 						return INVALID_AST?;
 					}
 					AstNode *const_ident = self.new_single_entry_paren(self.new_token(self.advance()!));
+					defer catch free_ast(const_ident);
 					if (!self.expect(RPAREN)!)
 					{
 						self.report_error("base_expr: expected RPAREN after parsing CT_FEATURE");
@@ -2231,6 +2256,7 @@ fn AstNode*? YadgParser.base_expr(&self)
 				// lambda_decl compount_statement
 				case FUNC:
 					AstNode* call = self.lambda_decl()!;
+					defer catch free_ast(call);
 					if (!self.expect(BRACE)!)
 					{
 						self.report_error("base_expr: expected '{'");
