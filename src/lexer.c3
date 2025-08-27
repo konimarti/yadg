@@ -627,6 +627,7 @@ fn Token*? Lexer._next(&self) @private => @pool()
 
 		case '<': return self.lex_contract()!;
 		case '$': return self.lex_compile_time()!;
+		case '#': return self.lex_hash_ident()!;
 		case '@': return self.lex_attribute();
 		case '"':
 		case '\'':

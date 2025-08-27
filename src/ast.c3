@@ -229,6 +229,7 @@ struct AstNode (Printable)
 
 fn AstNode* YadgParser.make_node(&self, AstType type)
 {
+	io::printfn("-- %s", type);
 	AstNode *node = allocator::new(self.allocator, AstNode);
 	node.type = type;
 	self.nodes.push(node);
@@ -682,7 +683,7 @@ fn AstNode*? YadgParser.opt_attributes(&self)
 }
 
 <*
- Returns an Attribute node or null if no attribute was found.
+ Returns an Attribute node or NO_ATTRIBUTE? if no attribute was found.
 
 attribute
 	: attribute_name
@@ -697,24 +698,26 @@ attribute_name
 *>
 fn AstNode*? YadgParser._attribute(&self)
 {
-	// FIXME: memory leak?
+	AstNode* node = self.make_node(AST_ATTRIBUTE);
+	defer catch node.free();
 
-	AstNode* path;
+	io::printn(">> enter attribute");
+	defer io::printn(">> leaving attribute");
+
 	if (self.peek() == IDENT)
 	{
-		path = self.path_at_type_ident()!;
+		node._attribute.path_at_type = self.path_at_type_ident()!;
 	}
 	if (self.peek() != AT_IDENT && self.peek() != AT_TYPE_IDENT)
 	{
 		return NO_ATTRIBUTE?;
 	}
 
-	Token* name = self.advance()!;
+	node._attribute.attribute_name = self.advance()!;
 
-	AstNode* param;
 	if (self.expect(LPAREN)!)
 	{
-		param = self.attribute_param_list()!;
+		node._attribute.attribute_param = self.attribute_param_list()!;
 		if (!self.expect(RPAREN)!)
 		{
 			self.report_error("attribute: expected RPAREN after attribute_param_list");
@@ -722,10 +725,6 @@ fn AstNode*? YadgParser._attribute(&self)
 		}
 	}
 
-	AstNode* node = self.make_node(AST_ATTRIBUTE);
-	node._attribute.path_at_type = path;
-	node._attribute.attribute_name = name;
-	node._attribute.attribute_param = param;
 	return node;
 }
 
@@ -1096,11 +1095,15 @@ fn AstNode*? YadgParser.parse_type(&self, bool type_suffix = true, bool generic_
 		case tok_type == IDENT:
 			// { IDENT SCOPE } TYPE_IDENT
 			AstNode* path = self.path()!;
-			foreach (ptok : path.tok_list) node.tok_list.push(ptok);
+			while (path.tok_list.len()) node.tok_list.push(path.tok_list.pop()!);
 			path.free();
-			if (self.peek() != TYPE_IDENT) return INVALID_TYPE?;
+			if (self.peek() != TYPE_IDENT)
+			{
+				return INVALID_TYPE?;
+			}
 			node.tok_list.push(self.advance()!);
-		case tok_type == AT_IDENT:
+		// case tok_type == AT_IDENT:
+		default:
 			return INVALID_TYPE?;
 	}
 
@@ -1621,8 +1624,10 @@ fn AstNode*? YadgParser.define_decl(&self)
 			node.attr_def.at_type_ident = self.advance()!;
 			if (self.peek() == LPAREN)
 			{
+				io::printn(">> before param !!");
 				node.attr_def.opt_parameters = self.fn_parameter_list()!;
 			}
+			io::printn(">>> after param list before attr");
 			node.attr_def.opt_attributes = self.opt_attributes()!;
 
 			if (self.expect(ASSIGN)!)
@@ -1990,16 +1995,15 @@ fn AstNode*? YadgParser.unary_expr(&self)
 	if (unary_op(self.peek()))
 	{
 		Token *tok;
-		AstNode* op;
+		AstNode*? op;
 		if (self.peek() == LPAREN)
 		{
-			tok = self.advance()!;
-			op = self.type()!;
+			tok = self.advance()!; // Consume '('
+			op = self.type();
 			// TODO: Hackish. Maybe we need some more lookahead and
 			// a way to see if it is a type
-			if (op && op.tok_list.len() == 0)
+			if (catch op)
 			{
-				free_ast(op);
 				self.push_back(tok);
 				return self.call_expr()!;
 			}
@@ -2230,7 +2234,12 @@ fn AstNode*? YadgParser.base_expr(&self)
                                default:
 			       		// type '.' access_ident
 			       		// type '.' CONST_IDENT
-			       		AstNode* type = self.type()!;
+			       		AstNode* type = self.type() ?? null;
+					if (!type)
+					{
+						self.report_error("base_expr: failed to read a type");
+						return INVALID_AST?;
+					}
 					if (!self.expect(DOT)!)
 					{
 						self.report_error("base_expr: expected DOT");

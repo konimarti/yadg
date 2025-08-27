@@ -11,6 +11,9 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
+	io::printn(">> entering attribute_param_list");
+	defer io::printn(">> leaving attribute_param_list");
+
 	while (self.peek() != EOF && self.peek() != RPAREN)
 	{
 		TokenType type = self.peek();
@@ -40,7 +43,7 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 			case relational_op(type):
 				node.ast_list.push(self.new_token(self.advance()!));
 			default:
-				node.ast_list.push(self.ternary_expr()!);
+				node.ast_list.push(self.constant_expr()!);
 		}
 		if (self.expect(COMMA)!) continue;
 	}
@@ -262,20 +265,25 @@ fn AstNode*? YadgParser.parameter_default(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
+	io::printn(">> entering parameter_default");
+	defer io::printn(">> leaving parameter_default");
+
+	if (try type = self.type())
+	{
+		io::printn(" >>> type found");
+		node.ast_list.push(type);
+	}
+
+		io::printfn(" >>> peek: %s", self.peek());
+
 	switch (self.peek())
 	{
+		case COMMA:  return node;
+		case RPAREN: return node;
 		case AND:
 			// '&' IDENT opt_attributes
 			node.ast_list.push(self.new_token(self.advance()!));
-			node.ast_list.push(self.new_literal(self.advance()!));
-			node.ast_list.push(self.opt_attributes()!);
-
-		case HASH_IDENT:
-			// HASH_IDENT opt_attributes
-			node.ast_list.push(self.new_literal(self.advance()!));
-			node.ast_list.push(self.opt_attributes()!);
-		case ELLIPSIS:
-			node.ast_list.push(self.new_token(self.advance()!));
+			nextcase IDENT;
 		case IDENT:
 			// IDENT opt_attributes
 			// IDENT ELLIPSIS opt_attributes
@@ -285,37 +293,51 @@ fn AstNode*? YadgParser.parameter_default(&self)
 				node.ast_list.push(self.new_token(self.advance()!));
 			}
 			node.ast_list.push(self.opt_attributes()!);
-		case CT_IDENT:
-			// CT_IDENt
-			// CT_IDENt ELLIPSIS
+
+		case HASH_IDENT:
+			// HASH_IDENT opt_attributes
 			node.ast_list.push(self.new_literal(self.advance()!));
-			if (self.peek() == ELLIPSIS)
+			node.ast_list.push(self.opt_attributes()!);
+		case ELLIPSIS:
+			node.ast_list.push(self.new_token(self.advance()!));
+			if (self.peek() == IDENT)
+			{
+				node.ast_list.push(self.new_literal(self.advance()!));
+				node.ast_list.push(self.opt_attributes()!);
+			} else if (self.peek() == CT_IDENT)
 			{
 				node.ast_list.push(self.new_literal(self.advance()!));
 			}
-		default:
-			// Here come all the options after 'type'.
-			node.ast_list.push(self.type()!);
-			switch (self.peek())
+			node.ast_list.push(self.opt_attributes()!);
+		case CT_IDENT:
+			io::printn("-- CT_IDENT --");
+			// CT_IDENT
+			// CT_IDENT ELLIPSIS
+			node.ast_list.push(self.new_literal(self.advance()!));
+			if (self.peek() == ELLIPSIS)
 			{
-				case IDENT:
-					node.ast_list.push(self.new_literal(self.advance()!));
-					node.ast_list.push(self.opt_attributes()!);
-				case ELLIPSIS:
-					node.ast_list.push(self.new_literal(self.advance()!));
-					if (self.peek() == IDENT || self.peek() == CT_IDENT)
-					{
-						node.ast_list.push(self.new_literal(self.advance()!));
-					}
-					node.ast_list.push(self.opt_attributes()!);
-				case CT_IDENT:
-					node.ast_list.push(self.new_literal(self.advance()!));
-				case HASH_IDENT:
-					node.ast_list.push(self.opt_attributes()!);
-				default:
-					self.report_error("parameter_default: not all tokens handled yet");
-					return INVALID_AST?;
+				node.ast_list.push(self.new_token(self.advance()!));
 			}
+		default:
+			self.report_error("parameter_default: unknown token");
+			return INVALID_AST?;
+	}
+
+	if (self.peek() == ASSIGN)
+	{
+		node.ast_list.push(self.new_token(self.advance()!)); // Consume '='
+		io::printn(" >>> consume ASSIGN");
+
+		// Now handle type or expr
+		if (try type = self.type())
+		{
+			node.ast_list.push(type);
+		}
+		else
+		{
+			io::printn(" >>> evaluate expr()");
+			node.ast_list.push(self.expr()!);
+		}
 	}
 
 	return node;

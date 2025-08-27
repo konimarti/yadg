@@ -33,6 +33,16 @@ fn void test_parser_mem() @test
 	run_parser(input)!!;
 }
 
+fn void test_module() @test
+{
+	String input = `
+	<* module doc-comment *>
+	module std::math::nolibc @if(env::NO_LIBC || $feature(C3_MATH));
+	module std::core::mem::allocator @if((env::POSIX || env::WIN32) && $feature(VMEM_TEMP));
+	`;
+	run_parser(input)!!;
+}
+
 fn void test_faultdef() @test
 {
 	String input = `
@@ -146,6 +156,10 @@ fn void test_func_definition() @test
 	fn int? String.fn_add(int a, int b) @local {}
 
 	fn int sendBreak(Fd fd, int duration) @deprecated => send_break(fd, duration);
+
+	fn TcpSocket? connect(String host, uint port, Duration timeout = time::DURATION_ZERO, SocketOption... options, IpProtocol ip_protocol = UNSPECIFIED)
+	{
+	}
 
 	`;
 	run_parser(input)!!;
