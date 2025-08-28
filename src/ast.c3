@@ -434,14 +434,19 @@ fn AstNode*? YadgParser.translation_unit(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	AstNode* top_level_stmt;
+	AstNode*? top_level_stmt;
 	while (!self.expect(EOF)!)
 	{
-		top_level_stmt = self.top_level()!;
-		if (top_level_stmt)
+		top_level_stmt = self.top_level();
+		if (catch err = top_level_stmt)
 		{
-			node.ast_list.push(top_level_stmt);
+			@pool() {
+			self.report_error(string::tformat("translation unit error: %s", err));
+			};
+			self.synchronize()!;
+			continue;
 		}
+		node.ast_list.push(top_level_stmt);
 	}
 
 	return node;
@@ -488,12 +493,7 @@ fn AstNode*? YadgParser.top_level(&self)
 				self.synchronize()!;
 				return self.top_level()!;
 			default:
-				if (try decl = self.global_decl())
-				{
-					return decl;
-				}
-				self.synchronize()!;
-				return self.top_level()!;
+				top = self.global_decl()!;
 		}
 	}
 
@@ -1417,10 +1417,15 @@ fn void? YadgParser.macro_func_body(&self)
 		case BRACE:     // Regular func/macro body
 			self.advance()!.free();
 		case IMPLIES:
+			if (try attr = self.opt_attributes() && attr)
+			{
+				return self.macro_func_body()!;
+			}
 			while (self.peek() != EOF && self.peek() != SEMICOLON)
 			{
 				self.advance()!.free();
 			}
+			return self.macro_func_body()!;
 		case EOF:
 			break;
 		default:
@@ -2107,7 +2112,7 @@ fn AstNode*? YadgParser.unary_expr(&self)
 				while (op.tok_list.len()) self.push_back(op.tok_list.pop()!!);
 				self.push_back(tok); // Pushback '('
 				free_ast(op);
-				return self.base_expr();
+				return self.call_expr();
 			}
 		}
 		else

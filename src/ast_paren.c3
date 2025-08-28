@@ -512,8 +512,9 @@ fn AstNode*? YadgParser.arg(&self)
 			node.ast_list.push(self.new_token(tok));
 			if (self.peek() != COLON)
 			{
-				self.report_error("arg: expected COLON after arg_name");
-				return INVALID_AST?;
+				// self.report_error("arg: expected COLON after arg_name");
+				// return INVALID_AST?;
+				return self.expr()!;
 			}
 			node.ast_list.push(self.new_token(self.advance()!)); // Consume ':'
 		}
