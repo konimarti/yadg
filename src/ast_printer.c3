@@ -201,6 +201,11 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += self.visit(node.lambda.fn_param_list)!;
 			n += self.visit(node.lambda.opt_attributes)!;
 
+		case AST_TERNARY:
+			n += self.visit(node.ternary.condition)!;
+			n += self.visit(node.ternary.consequent)!;
+			n += self.visit(node.ternary.alternative)!;
+
 		default:
 			n += f.printf("%s<not implemented yet in printer>\n", prefix)!;
 	}

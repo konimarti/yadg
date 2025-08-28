@@ -44,6 +44,7 @@ enum AstType
 	AST_PAREN,
 	AST_INTERFACE,
 	AST_ENUM_PARAM_DECL,
+	AST_TERNARY,
 
 	AST_LITERAL,
 	AST_UNARY,
@@ -221,6 +222,12 @@ struct AstNode (Printable)
 			AstNode* maybe_opt_type;
 			AstNode* fn_param_list;
 			AstNode* opt_attributes;
+		}
+		struct ternary
+		{
+			AstNode* condition;
+			AstNode* consequent;
+			AstNode* alternative;
 		}
 		Token*    literal;
 	}
@@ -411,6 +418,11 @@ fn void AstNode.free(&self)
 			free_ast(self.lambda.maybe_opt_type);
 			free_ast(self.lambda.fn_param_list);
 			free_ast(self.lambda.opt_attributes);
+
+		case AST_TERNARY:
+			free_ast(self.ternary.condition);
+			free_ast(self.ternary.consequent);
+			free_ast(self.ternary.alternative);
 	}
 }
 
@@ -1949,6 +1961,15 @@ fn AstNode* YadgParser.new_lambda(&self, AstNode* maybe_opt_type, AstNode* fn_pa
 	return node;
 }
 
+fn AstNode* YadgParser.new_ternary(&self, AstNode* condition, AstNode* consequent, AstNode* alternative) @private
+{
+	AstNode* node = self.make_node(AST_TERNARY);
+	node.ternary.condition = condition;
+	node.ternary.consequent = consequent;
+	node.ternary.alternative = alternative;
+	return node;
+}
+
 alias OpFn = fn bool(TokenType);
 alias ExprFn = fn AstNode*?(YadgParser*);
 macro AstNode*? YadgParser.eval_binary_expr(&self, OpFn is_op, ExprFn eval) @private
@@ -1980,8 +2001,40 @@ fn AstNode*? YadgParser.constant_expr(&self) @inline => self.ternary_expr();
 
 fn AstNode*? YadgParser.ternary_expr(&self)
 {
-	// TODO: implement rest
-	return self.suffix_expr()!;
+	AstNode* expr = self.suffix_expr()!;
+
+	AstNode* consequent, alternative;
+	defer catch {
+		free_ast(expr);
+		free_ast(consequent);
+		free_ast(alternative);
+	}
+
+	switch (self.peek())
+	{
+		case QUESTION:
+			self.advance()!.free();
+			consequent = self.expr()!;
+			if (!self.expect(COLON)!)
+			{
+				self.report_error("ternary_expr: expected COLON");
+				return INVALID_AST?;
+			}
+			alternative = self.ternary_expr()!;
+			return self.new_ternary(expr, consequent, alternative);
+		case ELVIS:
+		case OPTELSE:
+			self.advance()!.free(); // Consume ELVIS, OPTELSE
+			alternative = self.ternary_expr()!;
+			return self.new_ternary(expr, null, alternative);
+		case FUNC:
+			// TODO
+			//lambda_decl implies_body
+			unreachable("not implemented yet");
+		default:
+			return expr;
+
+	}
 }
 
 fn AstNode*? YadgParser.suffix_expr(&self)

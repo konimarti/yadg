@@ -286,3 +286,11 @@ fn void test_const_decl() @test
 	// assert(false);
 }
 
+fn void test_ternary() @test
+{
+	String input = `
+	const CUInt SA_ONSTACK       = env::LINUX ? 0x08000000 : 0x0001;
+	`;
+	run_parser(input)!!;
+	assert(false);
+}
