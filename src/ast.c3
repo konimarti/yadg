@@ -2234,13 +2234,33 @@ fn AstNode*? YadgParser.primary_expr(&self)
 	return expr;
 }
 
+<*
+@require type == STRING || type == BYTES
+*>
+fn AstNode*? YadgParser.rollup_token(&self, TokenType type) => @pool()
+{
+	Token* tok = self.advance()!;
+	assert(tok.type == type);
+
+	DString buf = dstring::temp(tok.text);
+	while (self.peek() == type)
+	{
+		Token* next = self.advance()!;
+		buf.append_chars(next.text);
+		next.free();
+	}
+	tok.text.free(tok.allocator);
+	tok.text = buf.copy_str(tok.allocator);
+	return self.new_literal(tok);
+}
+
 fn AstNode*? YadgParser.base_expr(&self)
 {
        switch (self.peek())
        {
-               // TODO: string_expr
-               // TODO: base_expr
                case STRING:
+               case BYTES:
+                       return self.rollup_token(self.peek());
                case NUMBER:
                case NUL:
                case TRUE:

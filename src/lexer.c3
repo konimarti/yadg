@@ -86,6 +86,7 @@ enum TokenType : ushort
 
 	// Identifiers and Strings
 	STRING,
+	BYTES,
 	NUMBER,
 	IDENT,
 	TYPE_IDENT,
@@ -629,6 +630,23 @@ fn Token*? Lexer._next(&self) @private => @pool()
 		case '$': return self.lex_compile_time()!;
 		case '#': return self.lex_hash_ident()!;
 		case '@': return self.lex_attribute();
+
+		case 'x':
+			self.advance()!; // Consume 'x'
+			TokenType type;
+			switch (self.peek()!)
+			{
+				case '"':
+				case '`':
+				case '\'':
+					self.token_start = self.pos();
+					return self.lex_hex()!;
+				default:
+
+					self.pushback(c);
+					return self.lex_ident()!;
+			}
+
 		case '"':
 		case '\'':
 		case '`':
@@ -736,10 +754,28 @@ fn String? Lexer.scan_string(&self, Allocator allocator)
 	return buf.str_view().copy(allocator);
 }
 
-fn Token*? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string(self.allocator)!);
-fn Token*? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}", self.allocator)!);
 // fn Token*? Lexer.lex_paren(&self)  => self.emit_token(PAREN, self.scan_surround(0, "(", ")", self.allocator)!);
+fn Token*? Lexer.lex_brace(&self)  => self.emit_token(BRACE, self.scan_surround(0, "{", "}", self.allocator)!);
 fn Token*? Lexer.lex_brack(&self)  => self.emit_token(BRACK, self.scan_surround(0, "[", "]", self.allocator)!);
+fn Token*? Lexer.lex_string(&self) => self.emit_token(STRING, self.scan_string(self.allocator)!);
+
+import std::encoding::hex;
+fn Token*? Lexer.lex_hex(&self) => @pool()
+{
+	DString buf = dstring::temp();
+	char quote = self.advance()!;
+	char c;
+	while ((c = self.peek()!) && c != quote)
+	{
+		if (ascii::is_xdigit(c))
+		{
+			buf.append_char(c);
+		}
+		self.advance()!;
+	}
+	if (self.peek()! == quote) self.advance()!;
+	return self.emit_token(BYTES, (String)hex::decode(self.allocator, buf.str_view())!);
+}
 
 fn Token*? Lexer.lex_comment(&self)
 {
