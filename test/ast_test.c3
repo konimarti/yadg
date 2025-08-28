@@ -255,8 +255,10 @@ fn void test_global_decl() @test
 	tlocal bool auto_create_temp = false;
 	bool auto_create_temp2 = false;
 	FopenFn native_fopen_fn @weak @if(!$defined(native_fopen_fn));
+	LogFn current_logfn = @select(env::LIBC, (LogFn)&StderrLogger.log, (LogFn)&NullLogger.log);
 	`;
 	run_parser(input)!!;
+	assert(false);
 }
 
 
