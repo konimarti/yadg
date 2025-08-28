@@ -37,6 +37,7 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 			case mult_op(type):
 			case additive_op(type):
 			case bit_op(type):
+			case shift_op(type):
 			case relational_op(type):
 				node.ast_list.push(self.new_token(self.advance()!));
 			default:

@@ -158,8 +158,10 @@ fn void test_func_definition() @test
 	fn int sendBreak(Fd fd, int duration) @deprecated => send_break(fd, duration);
 
 	fn TcpSocket? connect(String host, uint port, Duration timeout = time::DURATION_ZERO, SocketOption... options, IpProtocol ip_protocol = UNSPECIFIED)
-	{
-	}
+	{}
+
+	fn FBaseInt FBaseInt.shl(&s, usz n) @operator(<<)
+	{}
 
 	`;
 	run_parser(input)!!;
