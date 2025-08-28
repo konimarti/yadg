@@ -503,14 +503,22 @@ fn AstNode*? YadgParser.arg(&self)
 	else if (self.peek() == IDENT || self.peek() == CT_TYPE_IDENT || self.peek() == HASH_IDENT || self.peek() == CT_IDENT)
 	{
 		// arg_name
-		node.ast_list.push(self.new_token(self.advance()!));
-		if (self.peek() != COLON)
+		Token* tok = self.advance()!;
+		if (self.peek() == SCOPE)
 		{
-			return node;
-			// self.report_error("arg: expected COLON after arg_name");
-			// return INVALID_AST?;
+			// Opps. This looks like a path. Rewind.
+			self.push_back(tok);
 		}
-		node.ast_list.push(self.new_token(self.advance()!)); // Consume ':'
+		else
+		{
+			node.ast_list.push(self.new_token(tok));
+			if (self.peek() != COLON)
+			{
+				self.report_error("arg: expected COLON after arg_name");
+				return INVALID_AST?;
+			}
+			node.ast_list.push(self.new_token(self.advance()!)); // Consume ':'
+		}
 		// Now read either an expr or type
 	}
 	else if (self.peek() == CT_VASPLAT)

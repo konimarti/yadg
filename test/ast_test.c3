@@ -258,7 +258,6 @@ fn void test_global_decl() @test
 	LogFn current_logfn = @select(env::LIBC, (LogFn)&StderrLogger.log, (LogFn)&NullLogger.log);
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
 
 
