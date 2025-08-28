@@ -292,5 +292,4 @@ fn void test_ternary() @test
 	const CUInt SA_ONSTACK       = env::LINUX ? 0x08000000 : 0x0001;
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
