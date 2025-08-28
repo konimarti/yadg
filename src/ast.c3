@@ -945,7 +945,10 @@ fn AstNode*? YadgParser.enum_spec(&self)
 	defer catch node.free();
 
 	// base_type_no_generics
-	node.enum_spec.base_type_no_generics = self.base_type_no_generics()!;
+	if (try type = self.base_type_no_generics())
+	{
+		node.enum_spec.base_type_no_generics = type;
+	}
 
 	// enum_params
 	if (self.peek() == LPAREN)
@@ -2072,7 +2075,6 @@ fn AstNode*? YadgParser.mult_expr(&self)
 
 fn AstNode*? YadgParser.unary_expr(&self)
 {
-
 	if (unary_op(self.peek()))
 	{
 		Token *tok;
@@ -2089,11 +2091,13 @@ fn AstNode*? YadgParser.unary_expr(&self)
 			}
 			if (!self.expect(RPAREN)!)
 			{
-				free_tok(tok);
+				// Oops. We have a type but it's not done yet
+				// Now we rewind to '(' and call base_expr()
+
+				while (op.tok_list.len()) self.push_back(op.tok_list.pop()!!);
+				self.push_back(tok); // Pushback '('
 				free_ast(op);
-				io::printfn("type token in unary: %s", op.tok_list);
-				self.report_error("unary_expr: invalid '(' type ')' term");
-				return INVALID_AST?;
+				return self.base_expr();
 			}
 		}
 		else
