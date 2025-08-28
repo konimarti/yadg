@@ -251,8 +251,10 @@ fn void test_global_decl() @test
 	tlocal TempAllocator* top_temp;
 	tlocal bool auto_create_temp = false;
 	bool auto_create_temp2 = false;
+	FopenFn native_fopen_fn @weak @if(!$defined(native_fopen_fn));
 	`;
 	run_parser(input)!!;
+	assert(false);
 }
 
 
@@ -282,7 +284,6 @@ fn void test_const_decl() @test
 	const Win32_SHORT POLLPRI    = 0x0400;
 	`;
 	run_parser(input)!!;
-	// assert(false);
 }
 
 fn void test_ternary() @test

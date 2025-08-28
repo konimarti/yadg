@@ -497,7 +497,16 @@ fn AstNode*? YadgParser.arg(&self)
 		// param_path_element*
 		while (self.peek() != EOF && (self.peek() == BRACK || self.peek() == DOT))
 		{
-			node.ast_list.push(self.new_token(self.advance()!));
+			if (self.peek() == DOT)
+			{
+				// Handle '.' primary_expr
+				node.ast_list.push(self.new_token(self.advance()!));
+				node.ast_list.push(self.primary_expr()!);
+			}
+			else
+			{
+				node.ast_list.push(self.new_token(self.advance()!));
+			}
 		}
 		if (self.peek() != ASSIGN)
 		{
@@ -512,8 +521,9 @@ fn AstNode*? YadgParser.arg(&self)
 		node.ast_list.push(self.new_token(self.advance()!));
 		if (self.peek() != COLON)
 		{
-			self.report_error("arg: expected COLON after arg_name");
-			return INVALID_AST?;
+			return node;
+			// self.report_error("arg: expected COLON after arg_name");
+			// return INVALID_AST?;
 		}
 		node.ast_list.push(self.new_token(self.advance()!)); // Consume ':'
 		// Now read either an expr or type
