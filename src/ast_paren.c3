@@ -25,12 +25,10 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 				continue;
 			case type == AND:
 				node.ast_list.push(self.new_token(self.advance()!));
-				if (self.peek() != BRACK)
+				if (self.peek() == BRACK)
 				{
-					self.report_error("attribute_param_list: expected BRACK after &");
-					return INVALID_AST?;
+					node.ast_list.push(self.new_token(self.advance()!));
 				}
-				node.ast_list.push(self.new_token(self.advance()!));
 				continue;
 
 			case assignment_op(type):

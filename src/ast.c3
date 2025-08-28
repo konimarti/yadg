@@ -2031,6 +2031,7 @@ fn AstNode*? YadgParser.ternary_expr(&self)
 
 	switch (self.peek())
 	{
+		case CT_TERNARY:
 		case QUESTION:
 			self.advance()!.free();
 			consequent = self.expr()!;

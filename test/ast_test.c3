@@ -157,12 +157,11 @@ fn void test_func_definition() @test
 
 	fn int sendBreak(Fd fd, int duration) @deprecated => send_break(fd, duration);
 
-	fn TcpSocket? connect(String host, uint port, Duration timeout = time::DURATION_ZERO, SocketOption... options, IpProtocol ip_protocol = UNSPECIFIED)
-	{}
+	fn TcpSocket? connect(String host, uint port, Duration timeout = time::DURATION_ZERO, SocketOption... options, IpProtocol ip_protocol = UNSPECIFIED) {}
 
-	fn FBaseInt FBaseInt.shl(&s, usz n) @operator(<<)
-	{}
+	fn FBaseInt FBaseInt.shl(&s, usz n) @operator(<<) {}
 
+	fn BitSet BitSet.and(&self, BitSet set) @operator(&) {}
 	`;
 	run_parser(input)!!;
 }
@@ -259,7 +258,6 @@ fn void test_global_decl() @test
 	LogFn current_logfn = env::LIBC ??? (LogFn)&StderrLogger.log : (LogFn)&NullLogger.log;
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
 
 

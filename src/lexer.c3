@@ -56,6 +56,7 @@ enum TokenType : ushort
 	CT_AND_OP,
 	CT_OR_OP,
 	CT_CONCAT_OP,
+	CT_TERNARY,	//???
 
 	// Punctuation
 	SEMICOLON,
@@ -529,7 +530,12 @@ fn Token*? Lexer._next(&self) @private => @pool()
 			TokenType type;
 			switch (self.peek()!)
 			{
-				case '?': self.advance()!; type = OPTELSE;
+				case '?':
+					self.advance()!; type = OPTELSE;
+					if (self.peek()! == '?')
+					{
+						self.advance()!; type = CT_TERNARY;
+					}
 				case ':': self.advance()!; type = ELVIS;
 				default: type = QUESTION;
 			}
