@@ -282,6 +282,8 @@ fn void test_const_decl() @test
 	const usz _SS_PAD2SIZE = 112;
 	const Win32_SHORT POLLERR    = 0x0001;
 	const Win32_SHORT POLLPRI    = 0x0400;
+
+	const OPAD @private = 0x5C;
 	`;
 	run_parser(input)!!;
 }
