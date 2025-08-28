@@ -192,11 +192,8 @@ fn void test_macro() @test
 	macro int? String.add(#a, #b) {}
 
 	macro @ceil($input) @const => $$ceil($input);
-
 	macro void Mutex.@in_lock(&mutex; @body) {}
-
 	`;
-
 	run_parser(input)!!;
 }
 
@@ -240,6 +237,8 @@ fn void test_alias() @test
 	alias spawnp = posix_spawnp;
 	alias CONST_IDENT = math::CONST_SOMETHING;
 
+	// Debug errors from stdlib
+	alias ElementType = $typeof(((Type){})[0]);
 	`;
 	run_parser(input)!!;
 }

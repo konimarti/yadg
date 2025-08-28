@@ -1104,13 +1104,20 @@ fn AstNode*? YadgParser.parse_type(&self, bool type_suffix = true, bool generic_
 				case CT_TYPEFROM:
 				case CT_EVALTYPE:
 					// TODO: Hack
-					while (self.peek() != EOF && self.peek() != RPAREN)
+					if (self.peek() == LPAREN)
 					{
-						node.tok_list.push(self.advance()!);
-					}
-					if (self.peek() == RPAREN)
-					{
-						node.tok_list.push(self.advance()!);
+						usz depth = 1;
+						node.tok_list.push(self.advance()!); // Consume LPAREN
+						while (self.peek() != EOF && depth != 0)
+						{
+							switch (self.peek())
+							{
+								case LPAREN: depth++;
+								case RPAREN: depth--;
+								default: break;
+							}
+							node.tok_list.push(self.advance()!);
+						}
 					}
 
 				case CT_VATYPE:
