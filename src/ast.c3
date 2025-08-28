@@ -1396,11 +1396,11 @@ fn void? YadgParser.macro_func_body(&self)
 	{
 		case SEMICOLON: // macro_decl_decl
 		case BRACE:     // Regular func/macro body
-			self.advance()!;
+			self.advance()!.free();
 		case IMPLIES:
 			while (self.peek() != EOF && self.peek() != SEMICOLON)
 			{
-				self.advance()!;
+				self.advance()!.free();
 			}
 		case EOF:
 			break;
@@ -2028,12 +2028,11 @@ fn AstNode*? YadgParser.ternary_expr(&self)
 			alternative = self.ternary_expr()!;
 			return self.new_ternary(expr, null, alternative);
 		case FUNC:
-			// TODO
-			//lambda_decl implies_body
-			unreachable("not implemented yet");
+			AstNode* lambda = self.lambda_decl()!;
+			self.macro_func_body()!; // Discards the implied body
+			return lambda;
 		default:
 			return expr;
-
 	}
 }
 
