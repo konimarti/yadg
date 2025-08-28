@@ -2149,6 +2149,11 @@ fn AstNode*? YadgParser.call_trailing(&self)
 			// call_arg_list
 			self.advance()!.free(); // Consume '('
 			AstNode* op = self.call_arg_list()!;
+			if (!self.expect(RPAREN)!)
+			{
+				self.report_error("call_trailing: expected RPAREN");
+				return INVALID_AST?;
+			}
 
 			// call_inline_attributes
 			while (self.peek() != EOF && self.peek() == AT_IDENT)

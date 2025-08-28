@@ -404,28 +404,12 @@ fn AstNode*? YadgParser.call_arg_list(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	if (!self.expect(LPAREN)!)
-	{
-		self.report_error("call_arg_list: expected 'LPAREN' token");
-		return INVALID_AST?;
-	}
-
 	node.ast_list.push(self.arg_list()!);
 
 	// ';' parameters
 	if (self.expect(SEMICOLON)!)
 	{
-		while (self.peek() != EOF && self.peek() != RPAREN)
-		{
-			node.ast_list.push(self.parameter_default()!);
-			if (self.expect(COMMA)!) continue;
-		}
-	}
-
-	if (!self.expect(RPAREN)!)
-	{
-		self.report_error("call_arg_list: expected 'RPAREN' token");
-		return INVALID_AST?;
+		node.ast_list.push(self.parameters()!);
 	}
 
 	return node;

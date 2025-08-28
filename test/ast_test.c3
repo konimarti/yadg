@@ -193,6 +193,7 @@ fn void test_macro() @test
 
 	macro @ceil($input) @const => $$ceil($input);
 	macro void Mutex.@in_lock(&mutex; @body) {}
+	macro String? readline(Allocator allocator, stream = io::stdin()) {}
 	`;
 	run_parser(input)!!;
 }
@@ -254,7 +255,6 @@ fn void test_global_decl() @test
 	FopenFn native_fopen_fn @weak @if(!$defined(native_fopen_fn));
 	`;
 	run_parser(input)!!;
-	assert(false);
 }
 
 
