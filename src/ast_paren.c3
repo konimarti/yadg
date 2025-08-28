@@ -315,14 +315,14 @@ fn AstNode*? YadgParser.parameter_default(&self)
 	{
 		node.ast_list.push(self.new_token(self.advance()!)); // Consume '='
 
-		// Now handle type or expr
-		if (try type = self.type())
+		// Now handle 1.) expr or 2.) type on error
+		if (try expr = self.expr())
 		{
-			node.ast_list.push(type);
+			node.ast_list.push(expr);
 		}
 		else
 		{
-			node.ast_list.push(self.expr()!);
+			node.ast_list.push(self.type()!);
 		}
 	}
 

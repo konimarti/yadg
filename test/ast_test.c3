@@ -195,6 +195,8 @@ fn void test_macro() @test
 	macro @ceil($input) @const => $$ceil($input);
 	macro void Mutex.@in_lock(&mutex; @body) {}
 	macro String? readline(Allocator allocator, stream = io::stdin()) {}
+
+	macro void? CsvReader.@each_row(self, int rows = int.max; @body(String[] row)) @maydiscard {}
 	`;
 	run_parser(input)!!;
 }
