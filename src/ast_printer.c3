@@ -163,9 +163,10 @@ fn usz? AstPrinter.visit(&self, AstNode* node) => @pool()
 			n += self.visit(node.const_decl.opt_attributes)!;
 			n += self.visit(node.const_decl.expr)!;
 
-		case AST_INLINE:
-		case AST_EXTERN:
+		case AST_BUILTIN:
 		case AST_CONST:
+		case AST_EXTERN:
+		case AST_INLINE:
 		case AST_TLOCAL:
 			n += self.visit(node.child)!;
 

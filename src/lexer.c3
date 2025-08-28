@@ -1006,6 +1006,11 @@ fn Token*? Lexer.lex_compile_time(&self) => @pool()
 		return INVALID_CHAR?;
 	}
 	text.append_char(self.advance()!); // Consume '$'
+	if (self.peek()! == '$')
+	{
+		self.advance()!; // Consume second '$'
+		return self.emit_token(BUILTIN);
+	}
 	while ((c = self.peek()!) && (is_ident(c) || c == '$'))
 	{
 		text.append_char(self.advance()!);

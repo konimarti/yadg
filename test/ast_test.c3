@@ -287,6 +287,9 @@ fn void test_const_decl() @test
 
 	const OPAD @private = 0x5C;
 	const F25519Int D = x"a3785913ca4deb75 abd841414d0a7000 98e879777940c78c 73fe6f2bee6c0352";
+
+	// BUILTIN
+	const C_INT_SIZE = $$C_INT_SIZE;
 	`;
 	run_parser(input)!!;
 }

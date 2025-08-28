@@ -25,6 +25,7 @@ enum AstType
 	AST_EXTERN,
 	AST_CONST,
 	AST_TLOCAL,
+	AST_BUILTIN,
 	AST_FUNC_DEFINITION,
 	AST_FUNC_HEADER,
 	AST_FUNC_TYPEDEF,
@@ -382,9 +383,10 @@ fn void AstNode.free(&self)
 			free_tok(self._interface.type_ident);
 			free_tok(self._interface.opt_generic_parameters);
 
-		case AST_INLINE:
-		case AST_EXTERN:
+		case AST_BUILTIN:
 		case AST_CONST:
+		case AST_EXTERN:
+		case AST_INLINE:
 		case AST_TLOCAL:
 			free_ast(self.child);
 
@@ -910,6 +912,13 @@ fn AstNode* YadgParser._const(&self, AstNode* child)
 fn AstNode* YadgParser._tlocal(&self, AstNode* child)
 {
 	AstNode* node = self.make_node(AST_TLOCAL);
+	node.child = child;
+	return node;
+}
+
+fn AstNode* YadgParser._builtin(&self, AstNode* child)
+{
+	AstNode* node = self.make_node(AST_BUILTIN);
 	node.child = child;
 	return node;
 }
@@ -2296,8 +2305,19 @@ fn AstNode*? YadgParser.base_expr(&self)
 					self.expect(RPAREN)!;
 					return self.new_single_entry_paren(e);
 
-				// TODO: Handle BUILTIN
-				// TODO: Handle CT vars
+				case BUILTIN:
+					self.advance()!.free();
+					switch (self.peek())
+					{
+						case CONST_IDENT:
+						case IDENT:
+							return self._builtin(self.new_token(self.advance()!));
+						default:
+							self.report_error("base_expr: invalid BUILTIN token");
+							return INVALID_AST?;
+					}
+
+				// TODO: Handle the remaining CT tokens
 
 				case CT_DEFINED:
 					AstNode *ct = self.new_token(self.advance()!);
