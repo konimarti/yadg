@@ -42,6 +42,7 @@ fn AstNode*? YadgParser.attribute_param_list(&self)
 				node.ast_list.push(self.constant_expr()!);
 		}
 		if (!self.expect(COMMA)!) break;
+		io::printn(" >> NEXT ATTRIBUTE_PARAM");
 	}
 
 	return node;
@@ -403,6 +404,9 @@ fn AstNode*? YadgParser.call_arg_list(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
+	io::printn(" >> entering PAREN (call_arg_list)");
+	defer io::printn(" << leaving PAREN (call_arg_list)");
+
 	node.ast_list.push(self.arg_list()!);
 
 	// ';' parameters
@@ -427,6 +431,9 @@ fn AstNode*? YadgParser.arg_list(&self)
 	AstNode* node = self.make_node(AST_LIST);
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
+
+	io::printn(" >> entering AST_LIST (arg_list)");
+	defer io::printn(" << leaving AST_LIST (arg_list)");
 
 	while (self.peek() != EOF && self.peek() != RPAREN && self.peek() != SEMICOLON)
 	{

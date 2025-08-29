@@ -236,7 +236,7 @@ struct AstNode (Printable)
 
 fn AstNode* YadgParser.make_node(&self, AstType type)
 {
-	io::printfn("-- %s", type);
+	io::printfn("--> create %s", type);
 	AstNode *node = allocator::new(self.allocator, AstNode);
 	node.type = type;
 	self.nodes.push(node);
@@ -753,7 +753,7 @@ fn AstNode*? YadgParser._attribute(&self)
 			self.report_error("attribute: expected RPAREN after attribute_param_list");
 			return INVALID_AST?;
 		}
-		io::printn(" >> leaving RPAREN (attribute_param_list)");
+		io::printn(" << leaving RPAREN (attribute_param_list)");
 	}
 
 	return node;
@@ -2058,7 +2058,7 @@ fn AstNode*? YadgParser.constant_expr(&self) @inline => self.ternary_expr();
 fn AstNode*? YadgParser.ternary_expr(&self)
 {
 	io::printn(" >> entering TERNARY_EXPR");
-	defer io::printn(" >> leaving TERNARY_EXPR");
+	defer io::printn(" << leaving TERNARY_EXPR");
 
 	AstNode* expr = self.suffix_expr()!;
 
@@ -2126,7 +2126,7 @@ fn AstNode*? YadgParser.mult_expr(&self)
 fn AstNode*? YadgParser.unary_expr(&self)
 {
 	io::printn(" >> entering UNARY_EXPR");
-	defer io::printn(" >> leaving UNARY_EXPR");
+	defer io::printn(" << leaving UNARY_EXPR");
 	if (unary_op(self.peek()))
 	{
 		Token *tok;
@@ -2372,7 +2372,7 @@ fn AstNode*? YadgParser.base_expr(&self)
 						self.report_error("base_expr: expected LPAREN after CT_DEFINED");
 						return INVALID_AST?;
 					}
-					AstNode *paren = self.arg_list()!;
+					AstNode *paren = self.attribute_param_list()!;
 					defer catch free_ast(paren);
 					if (!self.expect(RPAREN)!)
 					{
