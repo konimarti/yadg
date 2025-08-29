@@ -746,12 +746,14 @@ fn AstNode*? YadgParser._attribute(&self)
 
 	if (self.expect(LPAREN)!)
 	{
+		io::printn(" >> entering LPAREN (attribute_param_list)");
 		node._attribute.attribute_param = self.attribute_param_list()!;
 		if (!self.expect(RPAREN)!)
 		{
 			self.report_error("attribute: expected RPAREN after attribute_param_list");
 			return INVALID_AST?;
 		}
+		io::printn(" >> leaving RPAREN (attribute_param_list)");
 	}
 
 	return node;
@@ -1179,6 +1181,36 @@ fn AstNode*? YadgParser.base_type(&self) => self.parse_type(false, true);
 fn AstNode*? YadgParser.type_no_generics(&self) => self.parse_type(true, false);
 fn AstNode*? YadgParser.base_type_no_generics(&self) => self.parse_type(false, false);
 fn AstNode*? YadgParser.type(&self) => self.parse_type(true, true);
+
+fn bool YadgParser.is_type(&self) => @pool()
+{
+	TokenList tok_list;
+	tok_list.tinit();
+
+	defer { while (tok_list.len()) self.push_back(tok_list.pop()!!); }
+
+	//  base_type_no_generics
+	TokenType tok_type = self.peek();
+	switch
+	{
+		case is_base_type_no_generics(tok_type):
+		case tok_type == TYPE_IDENT:
+			return true;
+		case tok_type == IDENT:
+			// { IDENT SCOPE } TYPE_IDENT
+			AstNode* path = self.path() ?? null;
+			if (!path) return false;
+			while (path.tok_list.len())
+			{
+				tok_list.push(path.tok_list.pop()!!);
+			}
+			path.free();
+			return self.peek() == TYPE_IDENT;
+		default:
+			return false;
+	}
+}
+
 
 <*
 optional_typnode
@@ -1744,7 +1776,7 @@ fn AstNode*? YadgParser.global_decl(&self)
 	while (self.peek() != EOF && self.peek() == IDENT)
 	{
 		node.global_decl.idents.push(self.advance()!);
-		if (self.expect(COMMA)!) continue;
+		if (!self.expect(COMMA)!) break;
 	}
 
 	node.global_decl.opt_attributes = self.opt_attributes()!;
@@ -2025,6 +2057,9 @@ fn AstNode*? YadgParser.constant_expr(&self) @inline => self.ternary_expr();
 
 fn AstNode*? YadgParser.ternary_expr(&self)
 {
+	io::printn(" >> entering TERNARY_EXPR");
+	defer io::printn(" >> leaving TERNARY_EXPR");
+
 	AstNode* expr = self.suffix_expr()!;
 
 	AstNode* consequent, alternative;
@@ -2090,18 +2125,22 @@ fn AstNode*? YadgParser.mult_expr(&self)
 
 fn AstNode*? YadgParser.unary_expr(&self)
 {
+	io::printn(" >> entering UNARY_EXPR");
+	defer io::printn(" >> leaving UNARY_EXPR");
 	if (unary_op(self.peek()))
 	{
 		Token *tok;
-		AstNode*? op;
+		AstNode* op;
 		if (self.peek() == LPAREN)
 		{
 			tok = self.advance()!; // Consume '('
-			// TODO: Hackish. Better way to see if it is a type?
-			op = self.type();
-			if (catch op)
+			if (self.is_type())
 			{
-				self.push_back(tok);
+				op = self.type()!;
+			}
+			else
+			{
+				self.push_back(tok); // Pushback '('
 				return self.call_expr()!;
 			}
 			if (!self.expect(RPAREN)!)

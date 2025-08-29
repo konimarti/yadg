@@ -260,9 +260,9 @@ fn AstNode*? YadgParser.parameter_default(&self)
 	node.ast_list.init(self.allocator);
 	defer catch node.free();
 
-	if (try type = self.type())
+	if (self.is_type())
 	{
-		node.ast_list.push(type);
+		node.ast_list.push(self.type()!);
 	}
 
 	switch (self.peek())
@@ -315,14 +315,14 @@ fn AstNode*? YadgParser.parameter_default(&self)
 	{
 		node.ast_list.push(self.new_token(self.advance()!)); // Consume '='
 
-		// Now handle 1.) expr or 2.) type on error
-		if (try expr = self.expr())
+		// Now handle expr or type
+		if (self.is_type())
 		{
-			node.ast_list.push(expr);
+			node.ast_list.push(self.type()!);
 		}
 		else
 		{
-			node.ast_list.push(self.type()!);
+			node.ast_list.push(self.expr()!);
 		}
 	}
 
@@ -535,9 +535,9 @@ fn AstNode*? YadgParser.arg(&self)
 	}
 
 	// Now handle type or expr
-	if (try type = self.type())
+	if (self.is_type())
 	{
-		node.ast_list.push(type);
+		node.ast_list.push(self.type()!);
 	}
 	else
 	{
