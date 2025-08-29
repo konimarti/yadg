@@ -209,15 +209,17 @@ fn void test_typedef() @test
 	typedef Char16 = uint[<3>];
 	<* typedef comment 1 *>
 	typedef WString = inline Char16*;
-		typedef PriorityQueue = inline PrivatePriorityQueue{Type, false};
-		typedef PriorityQueueMax = inline PrivatePriorityQueue{Type, true};
-		typedef ObjcSelector = void*;
-		typedef Pthread_mutex_t = ulong[8];
-		typedef Win32_CRITICAL_SECTION = ulong[5];
-		typedef Win32_CONDITION_VARIABLE = void*;
-		typedef String @if(!$defined(String)) = inline char[];
-		typedef NanoDuration (Printable) @structlike = long;
-		typedef Sfc128Random (Random) = uint128[4];
+	typedef PriorityQueue = inline PrivatePriorityQueue{Type, false};
+	typedef PriorityQueueMax = inline PrivatePriorityQueue{Type, true};
+	typedef ObjcSelector = void*;
+	typedef Pthread_mutex_t = ulong[8];
+	typedef Win32_CRITICAL_SECTION = ulong[5];
+	typedef Win32_CONDITION_VARIABLE = void*;
+	typedef String @if(!$defined(String)) = inline char[];
+	typedef NanoDuration (Printable) @structlike = long;
+	typedef Sfc128Random (Random) = uint128[4];
+
+	typedef String @if(!$defined(String)) = inline char[];
 	`;
 	run_parser(input)!!;
 }

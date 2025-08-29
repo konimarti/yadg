@@ -1569,6 +1569,12 @@ fn AstNode*? YadgParser.distinct_decl(&self)
 	node.distinct_decl.opt_inline = self.expect(INLINE)!;
 	node.distinct_decl.type = self.type()!;
 
+	if (!self.expect(SEMICOLON)!)
+	{
+		self.report_error("distinct_decl: expected a 'SEMICOLON' token");
+		return INVALID_AST?;
+	}
+
 	return node;
 }
 
@@ -2330,15 +2336,25 @@ fn AstNode*? YadgParser.base_expr(&self)
                        {
                                // ident_expr
                                case IDENT:
-			       		AstNode* path = self.path()!;
-					if (self.peek() == CONST_IDENT || self.peek() == AT_IDENT)
+			       		Token* tok = self.advance()!;
+					if (self.peek() == SCOPE)
 					{
-						path.tok_list.push(self.advance()!);
+						// Oops. That's probably a 'path ident_expr'. Rewind.
+						self.push_back(tok);
+
+						AstNode* path = self.path()!;
+						if (self.peek() == CONST_IDENT || self.peek() == AT_IDENT)
+						{
+							path.tok_list.push(self.advance()!);
+						}
+						return path;
 					}
-					return path;
+                                       return self.new_token(tok);
 
                                case CONST_IDENT:
                                case AT_IDENT:
+			       		nextcase;
+			       // local_ident_expr
                                case CT_IDENT:
                                case HASH_IDENT:
                                        return self.new_token(self.advance()!);
@@ -2418,6 +2434,7 @@ fn AstNode*? YadgParser.base_expr(&self)
 					return self.new_call(call, self.new_token(self.advance()!));
 
                                default:
+			       		// type
 			       		// type '.' access_ident
 			       		// type '.' CONST_IDENT
 			       		AstNode* type = self.type() ?? null;
@@ -2426,16 +2443,15 @@ fn AstNode*? YadgParser.base_expr(&self)
 						self.report_error("base_expr: failed to read a type");
 						return INVALID_AST?;
 					}
-					if (!self.expect(DOT)!)
+					if (self.expect(DOT)!)
 					{
-						self.report_error("base_expr: expected DOT");
-						return INVALID_AST?;
+						if (self.peek() == CONST_IDENT)
+						{
+							return self.new_unary(type, self.new_token(self.advance()!));
+						}
+						return self.new_unary(type, self.access_ident()!);
 					}
-					if (self.peek() == CONST_IDENT)
-					{
-						return self.new_unary(type, self.new_token(self.advance()!));
-					}
-					return self.new_unary(type, self.access_ident()!);
+					return type;
                        }
        }
 }
